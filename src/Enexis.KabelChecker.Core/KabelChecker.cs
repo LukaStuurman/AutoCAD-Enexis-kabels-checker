@@ -157,7 +157,19 @@ public sealed class KabelCheckerEngine
     {
         ArgumentNullException.ThrowIfNull(input);
 
-        var grouped = input
+        var rawSegments = input.ToArray();
+        foreach (var segment in rawSegments)
+        {
+            if (string.IsNullOrWhiteSpace(segment.CableName))
+                throw new InvalidOperationException("Kabeltype ontbreekt.");
+
+            if (segment.LengthMeters < 0 || double.IsNaN(segment.LengthMeters) || double.IsInfinity(segment.LengthMeters))
+                throw new InvalidOperationException($"Ongeldige lengte voor {segment.CableName}.");
+
+            _ = CableCatalog.Get(segment.CableName);
+        }
+
+        var grouped = rawSegments
             .Where(x => x.LengthMeters > 0)
             .GroupBy(x => x.CableName, StringComparer.OrdinalIgnoreCase)
             .Select(g => new CableSegment(g.Key, g.Sum(x => x.LengthMeters)))
@@ -165,14 +177,6 @@ public sealed class KabelCheckerEngine
 
         if (grouped.Length == 0)
             throw new InvalidOperationException("Voer minimaal één kabellengte groter dan 0 meter in.");
-
-        foreach (var segment in grouped)
-        {
-            if (segment.LengthMeters < 0 || double.IsNaN(segment.LengthMeters) || double.IsInfinity(segment.LengthMeters))
-                throw new InvalidOperationException($"Ongeldige lengte voor {segment.CableName}.");
-
-            _ = CableCatalog.Get(segment.CableName);
-        }
 
         var totalR = grouped.Sum(segment =>
         {
