@@ -1,0 +1,21 @@
+name: Core Excel reference check
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Verify Excel reference cases
+        run: dotnet run --project tools/VerifyExcelCases/VerifyExcelCases.csproj -c Release
