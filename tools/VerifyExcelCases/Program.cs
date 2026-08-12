@@ -39,8 +39,11 @@ void Check(
 {
     var result = engine.Calculate(segments, profile);
 
-    AssertEqual(expectedFuse, result.FuseAmps, $"{name}: gG");
-    AssertEqual(expectedDesignCurrent, result.MaxDesignCurrentAmps, $"{name}: ontwerpstroom");
+    if (result.FuseAmps != expectedFuse)
+        throw new InvalidOperationException($"{name}: gG verwacht {expectedFuse}, berekend {result.FuseAmps?.ToString() ?? "geen"}.");
+
+    if (result.MaxDesignCurrentAmps != expectedDesignCurrent)
+        throw new InvalidOperationException($"{name}: ontwerpstroom verwacht {expectedDesignCurrent}, berekend {result.MaxDesignCurrentAmps?.ToString() ?? "geen"}.");
 
     if (Math.Abs(result.TotalImpedanceOhm - expectedZ) > 1e-12)
         throw new InvalidOperationException(
@@ -48,10 +51,4 @@ void Check(
 
     Console.WriteLine(
         $"OK - {name}: {result.FuseAmps} A gG / {result.MaxDesignCurrentAmps} A / Z={result.TotalImpedanceOhm:0.000000} Ω");
-}
-
-static void AssertEqual<T>(T expected, T actual, string name)
-{
-    if (!EqualityComparer<T>.Default.Equals(expected, actual))
-        throw new InvalidOperationException($"{name}: verwacht {expected}, berekend {actual}.");
 }
