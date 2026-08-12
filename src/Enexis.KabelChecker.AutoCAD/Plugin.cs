@@ -26,7 +26,7 @@ public sealed class PluginEntry : IExtensionApplication
 public sealed class KabelCheckerCommands
 {
     [CommandMethod("ENEXISKABELCHECK", CommandFlags.Modal)]
-    public void OpenManualCalculator()
+    public void OpenDirectionBuilder()
     {
         using var form = new KabelCheckerForm();
         AcApp.ShowModalDialog(form);
@@ -49,8 +49,60 @@ internal sealed record SelectionReadResult(
     IReadOnlyDictionary<string, double> LengthsByCable,
     string Message);
 
+internal sealed record PolylinePickResult(
+    bool Cancelled,
+    double LengthMeters,
+    string Message);
+
 internal static class AutoCadSelectionReader
 {
+    public static PolylinePickResult PickSinglePolyline(Form modalForm, string cableName)
+    {
+        var doc = AcApp.DocumentManager.MdiActiveDocument;
+        if (doc is null)
+            return new PolylinePickResult(true, 0, "Geen actieve tekening.");
+
+        var editor = doc.Editor;
+        var database = doc.Database;
+
+        using var interaction = editor.StartUserInteraction(modalForm);
+
+        var options = new PromptEntityOptions(
+            $"\nSelecteer de polyline voor {cableName}: ");
+        options.SetRejectMessage("\nSelecteer een 2D- of 3D-polyline.");
+        options.AddAllowedClass(typeof(Polyline), false);
+        options.AddAllowedClass(typeof(Polyline2d), false);
+        options.AddAllowedClass(typeof(Polyline3d), false);
+
+        var picked = editor.GetEntity(options);
+        if (picked.Status != PromptStatus.OK)
+            return new PolylinePickResult(true, 0, "Polyline-selectie geannuleerd.");
+
+        var unitFactor = GetMetersPerDrawingUnit(database.Insunits, out var unitWarning);
+
+        using var transaction = database.TransactionManager.StartTransaction();
+        if (transaction.GetObject(picked.ObjectId, OpenMode.ForRead) is not Curve curve)
+            return new PolylinePickResult(true, 0, "Het geselecteerde object kon niet als polyline worden gelezen.");
+
+        double rawLength;
+        try
+        {
+            rawLength = Math.Abs(
+                curve.GetDistanceAtParameter(curve.EndParam) -
+                curve.GetDistanceAtParameter(curve.StartParam));
+        }
+        catch (Autodesk.AutoCAD.Runtime.Exception ex)
+        {
+            return new PolylinePickResult(true, 0, $"Lengte kon niet worden bepaald: {ex.Message}");
+        }
+
+        var lengthMeters = rawLength * unitFactor;
+        if (lengthMeters <= 0 || double.IsNaN(lengthMeters) || double.IsInfinity(lengthMeters))
+            return new PolylinePickResult(true, 0, "De geselecteerde polyline heeft geen geldige lengte.");
+
+        return new PolylinePickResult(false, lengthMeters, unitWarning);
+    }
+
     public static SelectionReadResult ReadCurrentDrawing()
     {
         var doc = AcApp.DocumentManager.MdiActiveDocument;
@@ -118,16 +170,16 @@ internal static class AutoCadSelectionReader
             messages.Add(
                 "Niet herkende kabellaag/lagen: " +
                 string.Join(", ", unknownLayers.OrderBy(x => x)) +
-                ". Vul deze lengtes handmatig aan.");
+                ". Voeg deze segmenten handmatig via de kabeltype/polyline-workflow toe.");
         }
 
         if (unsupported > 0)
             messages.Add($"{unsupported} geselecteerde object(en) konden niet als kabelcurve worden verwerkt.");
 
         if (lengths.Count == 0)
-            messages.Add("Er zijn geen kabeltypen automatisch herkend. Vul de kabellengtes handmatig in.");
+            messages.Add("Er zijn geen kabeltypen automatisch herkend. Voeg de richting op via kabeltype + polyline.");
         else
-            messages.Add("Herkende lengtes zijn uit de selectie overgenomen. Controleer de waarden vóór berekenen.");
+            messages.Add("Herkende lengtes zijn als segmenten overgenomen. Je kunt extra kabeldelen toevoegen voordat je berekent.");
 
         return new SelectionReadResult(false, lengths, string.Join(Environment.NewLine, messages));
     }
