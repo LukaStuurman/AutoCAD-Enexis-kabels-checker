@@ -7,6 +7,24 @@ De rekenregels zijn overgenomen uit `Eea-0205.K 1.0.xlsx`, specifiek uit:
 - `Controle_kabel_evenredig` — evenredig verdeelde belasting over de kabel (50%)
 - `Controle_kabel_laatste_helft` — belasting geconcentreerd op de laatste helft van de kabel (75%)
 
+## Werkwijze in AutoCAD
+
+Start `ENEXISKABELCHECK` en bouw één richting stap voor stap op:
+
+1. kies het kabeltype, bijvoorbeeld `150Al`;
+2. klik op **Polyline kiezen + toevoegen**;
+3. selecteer de bijbehorende polyline in de tekening;
+4. de plugin leest automatisch de volledige polyline-lengte en voegt die als segment aan de richting toe;
+5. kies eventueel een ander kabeltype, bijvoorbeeld `95Al`, en selecteer de volgende polyline van dezelfde richting;
+6. herhaal dit totdat de hele richting is opgebouwd;
+7. kies de juiste belastingsituatie en klik op **Bereken richting**;
+8. bekijk de maximaal toegestane gG-afzekering en maximale ontwerpstroom;
+9. klik op **Reset richting** om direct met een volgende richting te beginnen.
+
+Ieder gekozen kabeldeel blijft als afzonderlijk segment zichtbaar. Een verkeerd gekozen segment kan met **Geselecteerd segment verwijderen** weer uit de richting worden gehaald. Als hetzelfde kabeltype meerdere keren voorkomt, worden de lengtes voor de elektrische berekening automatisch samengevoegd.
+
+De polyline-lengte wordt omgerekend naar meters op basis van `INSUNITS`. Bij een niet-herkende tekeneenheid behandelt de plugin één tekeneenheid als één meter en toont hij een waarschuwing.
+
 ## Resultaat
 
 De checker beoordeelt de reeks 63 / 80 / 100 / 125 / 160 / 200 / 250 A gG en geeft de hoogste toegestane combinatie terug. De bijbehorende maximale ontwerpstromen zijn 57 / 72 / 90 / 113 / 144 / 180 / 225 A.
@@ -20,8 +38,8 @@ Een zekering is alleen toegestaan wanneer beide controles voldoen.
 
 ## AutoCAD-commando's
 
-- `ENEXISKABELCHECK` — opent de calculator en laat kabellengtes handmatig invoeren.
-- `ENEXISKABELCHECKSEL` — laat kabelobjecten in de tekening selecteren, telt de lengtes op en probeert het kabeltype uit de laagnaam te herkennen. Daarna opent dezelfde calculator met de gevonden lengtes ingevuld.
+- `ENEXISKABELCHECK` — aanbevolen workflow: kabeltype kiezen, polyline aanklikken en zo één volledige richting opbouwen.
+- `ENEXISKABELCHECKSEL` — alternatieve bulkselectie: selecteert meerdere kabelcurves tegelijk en probeert het kabeltype uit de laagnaam te herkennen. De gevonden delen worden daarna in dezelfde richting-builder geladen.
 
 ## Ondersteunde kabeltypen
 
@@ -51,4 +69,4 @@ Voor ontwikkeling kan `Enexis.KabelChecker.AutoCAD.dll` ook met `NETLOAD` worden
 
 ## Belangrijk
 
-De Excel-waarschuwing over kabelverjonging blijft gelden: zwaardere kabels horen aan het begin van de kabelgroep te liggen en dunnere kabels aan het einde. De huidige rekenengine controleert de elektrische waarden exact op basis van kabeltypen en lengtes, maar kan de fysieke volgorde van kabelverjonging niet betrouwbaar afleiden uit alleen geaggregeerde lengtes.
+De Excel-waarschuwing over kabelverjonging blijft gelden: zwaardere kabels horen aan het begin van de kabelgroep te liggen en dunnere kabels aan het einde. Omdat de nieuwe workflow ieder kabeldeel in selectievolgorde bewaart, kan hier later ook een automatische volgordecontrole aan worden toegevoegd.
