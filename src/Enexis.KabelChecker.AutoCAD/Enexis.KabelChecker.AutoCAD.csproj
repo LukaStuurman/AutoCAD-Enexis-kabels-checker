@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>Enexis.KabelChecker.AutoCAD</AssemblyName>
+    <RootNamespace>Enexis.KabelChecker.AutoCAD</RootNamespace>
+    <AutoCADManagedDir Condition="'$(AutoCADManagedDir)' == ''">C:\Program Files\Autodesk\AutoCAD 2025</AutoCADManagedDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Enexis.KabelChecker.Core\Enexis.KabelChecker.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="AcCoreMgd">
+      <HintPath>$(AutoCADManagedDir)\AcCoreMgd.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="AcDbMgd">
+      <HintPath>$(AutoCADManagedDir)\AcDbMgd.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="AcMgd">
+      <HintPath>$(AutoCADManagedDir)\AcMgd.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+</Project>
