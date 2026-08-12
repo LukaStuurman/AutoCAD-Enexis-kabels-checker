@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Text;
 using Enexis.KabelChecker.Core;
 
@@ -8,6 +7,7 @@ internal sealed class KabelCheckerForm : Form
 {
     private readonly KabelCheckerEngine _engine = new();
     private readonly ComboBox _profile = new();
+    private readonly ComboBox _cablePicker = new();
     private readonly DataGridView _grid = new();
     private readonly Label _fuseResult = new();
     private readonly Label _designResult = new();
@@ -16,12 +16,13 @@ internal sealed class KabelCheckerForm : Form
     private readonly Label _ampacityResult = new();
     private readonly TextBox _details = new();
     private readonly Label _message = new();
+    private readonly List<CableSegment> _segments = new();
 
     public KabelCheckerForm(
         IReadOnlyDictionary<string, double>? presetLengths = null,
         string? message = null)
     {
-        Text = "Enexis kabel checker";
+        Text = "Enexis kabel checker - richting opbouwen";
         StartPosition = FormStartPosition.CenterScreen;
         Width = 980;
         Height = 780;
@@ -30,11 +31,12 @@ internal sealed class KabelCheckerForm : Form
         Font = new Font("Segoe UI", 9F);
 
         BuildUi();
-        FillCableRows(presetLengths);
+        FillCablePicker();
+        LoadPresetSegments(presetLengths);
 
         _message.Text = message ??
-            "Vul per gebruikte kabeldoorsnede de totale lengte binnen deze richting in. " +
-            "Controleer kabelverjonging handmatig: zwaar aan het begin, dunner richting einde.";
+            "Kies een kabeltype, klik op 'Polyline kiezen + toevoegen' en selecteer de bijbehorende polyline in AutoCAD. " +
+            "Herhaal dit voor alle kabeldelen van dezelfde richting en druk daarna op 'Bereken richting'.";
     }
 
     private void BuildUi()
@@ -44,25 +46,26 @@ internal sealed class KabelCheckerForm : Form
             Dock = DockStyle.Fill,
             Padding = new Padding(12),
             ColumnCount = 1,
-            RowCount = 6
+            RowCount = 7
         };
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        root.RowStyles.Add(new RowStyle(SizeType.Percent, 55));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        root.RowStyles.Add(new RowStyle(SizeType.Percent, 45));
+        root.RowStyles.Add(new RowStyle(SizeType.Percent, 42));
+        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        root.RowStyles.Add(new RowStyle(SizeType.Percent, 58));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
         var title = new Label
         {
-            Text = "Controle laagspanningskabel",
+            Text = "Controle laagspanningsrichting",
             AutoSize = true,
             Font = new Font(Font.FontFamily, 15F, FontStyle.Bold),
             Margin = new Padding(0, 0, 0, 8)
         };
         root.Controls.Add(title, 0, 0);
 
-        var header = new FlowLayoutPanel
+        var profilePanel = new FlowLayoutPanel
         {
             Dock = DockStyle.Fill,
             AutoSize = true,
@@ -70,7 +73,7 @@ internal sealed class KabelCheckerForm : Form
             WrapContents = true,
             Margin = new Padding(0, 0, 0, 8)
         };
-        header.Controls.Add(new Label
+        profilePanel.Controls.Add(new Label
         {
             Text = "Belastingsituatie:",
             AutoSize = true,
@@ -82,25 +85,57 @@ internal sealed class KabelCheckerForm : Form
         _profile.Items.Add(new ProfileItem("Evenredig verdeeld over kabel (50%)", LoadProfile.Evenredig));
         _profile.Items.Add(new ProfileItem("Geconcentreerd op laatste helft (75%)", LoadProfile.LaatsteHelft));
         _profile.SelectedIndex = 0;
-        header.Controls.Add(_profile);
+        profilePanel.Controls.Add(_profile);
+        root.Controls.Add(profilePanel, 0, 1);
 
-        var calculateTop = new Button
+        var addPanel = new FlowLayoutPanel
         {
-            Text = "Bereken",
+            Dock = DockStyle.Fill,
             AutoSize = true,
-            Margin = new Padding(12, 2, 0, 0)
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = true,
+            Padding = new Padding(8),
+            Margin = new Padding(0, 0, 0, 8),
+            BorderStyle = BorderStyle.FixedSingle
         };
-        calculateTop.Click += (_, _) => Calculate();
-        header.Controls.Add(calculateTop);
-        root.Controls.Add(header, 0, 1);
+        addPanel.Controls.Add(new Label
+        {
+            Text = "Kabeltype:",
+            AutoSize = true,
+            Padding = new Padding(0, 7, 5, 0)
+        });
+
+        _cablePicker.DropDownStyle = ComboBoxStyle.DropDownList;
+        _cablePicker.Width = 245;
+        addPanel.Controls.Add(_cablePicker);
+
+        var pickPolyline = new Button
+        {
+            Text = "Polyline kiezen + toevoegen",
+            AutoSize = true,
+            Margin = new Padding(10, 1, 0, 0)
+        };
+        pickPolyline.Click += (_, _) => PickPolylineForSelectedCable();
+        addPanel.Controls.Add(pickPolyline);
+
+        var remove = new Button
+        {
+            Text = "Geselecteerd segment verwijderen",
+            AutoSize = true,
+            Margin = new Padding(10, 1, 0, 0)
+        };
+        remove.Click += (_, _) => RemoveSelectedSegment();
+        addPanel.Controls.Add(remove);
+
+        root.Controls.Add(addPanel, 0, 2);
 
         ConfigureGrid();
-        root.Controls.Add(_grid, 0, 2);
+        root.Controls.Add(_grid, 0, 3);
 
         _message.AutoSize = true;
         _message.MaximumSize = new Size(920, 0);
         _message.Padding = new Padding(2, 8, 2, 8);
-        root.Controls.Add(_message, 0, 3);
+        root.Controls.Add(_message, 0, 4);
 
         var resultPanel = new TableLayoutPanel
         {
@@ -139,9 +174,9 @@ internal sealed class KabelCheckerForm : Form
         _details.ReadOnly = true;
         _details.ScrollBars = ScrollBars.Vertical;
         _details.Font = new Font("Consolas", 9F);
-        _details.Text = "Druk op Bereken om alle gG-stappen te controleren.";
+        _details.Text = "Bouw eerst de richting op en druk daarna op Bereken richting.";
         resultPanel.Controls.Add(_details, 1, 0);
-        root.Controls.Add(resultPanel, 0, 4);
+        root.Controls.Add(resultPanel, 0, 5);
 
         var footer = new FlowLayoutPanel
         {
@@ -154,15 +189,15 @@ internal sealed class KabelCheckerForm : Form
         close.Click += (_, _) => Close();
         footer.Controls.Add(close);
 
-        var clear = new Button { Text = "Lengtes wissen", AutoSize = true };
-        clear.Click += (_, _) => ClearLengths();
-        footer.Controls.Add(clear);
+        var reset = new Button { Text = "Reset richting", AutoSize = true };
+        reset.Click += (_, _) => ResetDirection();
+        footer.Controls.Add(reset);
 
-        var calculate = new Button { Text = "Bereken", AutoSize = true };
+        var calculate = new Button { Text = "Bereken richting", AutoSize = true };
         calculate.Click += (_, _) => Calculate();
         footer.Controls.Add(calculate);
 
-        root.Controls.Add(footer, 0, 5);
+        root.Controls.Add(footer, 0, 6);
         Controls.Add(root);
         AcceptButton = calculate;
         CancelButton = close;
@@ -175,124 +210,151 @@ internal sealed class KabelCheckerForm : Form
         _grid.AllowUserToDeleteRows = false;
         _grid.AllowUserToResizeRows = false;
         _grid.RowHeadersVisible = false;
-        _grid.SelectionMode = DataGridViewSelectionMode.CellSelect;
+        _grid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
+        _grid.MultiSelect = true;
+        _grid.ReadOnly = true;
         _grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
 
         _grid.Columns.Add(new DataGridViewTextBoxColumn
         {
+            Name = "Order",
+            HeaderText = "#",
+            FillWeight = 35
+        });
+        _grid.Columns.Add(new DataGridViewTextBoxColumn
+        {
             Name = "Cable",
             HeaderText = "Kabeltype",
-            ReadOnly = true,
-            FillWeight = 160
-        });
-        _grid.Columns.Add(new DataGridViewTextBoxColumn
-        {
-            Name = "Material",
-            HeaderText = "Materiaal",
-            ReadOnly = true,
-            FillWeight = 65
-        });
-        _grid.Columns.Add(new DataGridViewTextBoxColumn
-        {
-            Name = "Ampacity",
-            HeaderText = "Zomer [A]",
-            ReadOnly = true,
-            FillWeight = 75,
-            DefaultCellStyle = new DataGridViewCellStyle { Format = "0.0" }
-        });
-        _grid.Columns.Add(new DataGridViewTextBoxColumn
-        {
-            Name = "Resistance",
-            HeaderText = "R [Ω/km]",
-            ReadOnly = true,
-            FillWeight = 75,
-            DefaultCellStyle = new DataGridViewCellStyle { Format = "0.0000" }
-        });
-        _grid.Columns.Add(new DataGridViewTextBoxColumn
-        {
-            Name = "Reactance",
-            HeaderText = "X [Ω/km]",
-            ReadOnly = true,
-            FillWeight = 75,
-            DefaultCellStyle = new DataGridViewCellStyle { Format = "0.0000" }
+            FillWeight = 180
         });
         _grid.Columns.Add(new DataGridViewTextBoxColumn
         {
             Name = "Length",
-            HeaderText = "Lengte [m]",
-            ReadOnly = false,
-            FillWeight = 90,
+            HeaderText = "Polyline lengte [m]",
+            FillWeight = 100,
             DefaultCellStyle = new DataGridViewCellStyle { Format = "0.00" }
         });
     }
 
-    private void FillCableRows(IReadOnlyDictionary<string, double>? presetLengths)
+    private void FillCablePicker()
     {
-        _grid.Rows.Clear();
+        _cablePicker.Items.Clear();
         foreach (var cable in CableCatalog.All)
         {
-            var length = presetLengths is not null && presetLengths.TryGetValue(cable.Name, out var found)
-                ? found
-                : 0.0;
+            _cablePicker.Items.Add(new CableItem(
+                $"{cable.CrossSectionMm2}{cable.Material}  ({cable.Name})",
+                cable.Name));
+        }
 
-            _grid.Rows.Add(
-                cable.Name,
-                cable.Material,
-                cable.SummerAmpacityA,
-                cable.ResistanceOhmPerKm,
-                cable.ReactanceOhmPerKm,
-                length > 0 ? length.ToString("0.###", CultureInfo.CurrentCulture) : string.Empty);
+        var defaultIndex = CableCatalog.All
+            .Select((cable, index) => (cable, index))
+            .FirstOrDefault(x => x.cable.CrossSectionMm2 == 150 && x.cable.Material == "Al")
+            .index;
+
+        _cablePicker.SelectedIndex = _cablePicker.Items.Count > 0
+            ? Math.Clamp(defaultIndex, 0, _cablePicker.Items.Count - 1)
+            : -1;
+    }
+
+    private void LoadPresetSegments(IReadOnlyDictionary<string, double>? presetLengths)
+    {
+        if (presetLengths is null)
+            return;
+
+        foreach (var pair in presetLengths)
+        {
+            if (pair.Value > 0 && CableCatalog.TryGet(pair.Key, out _))
+                _segments.Add(new CableSegment(pair.Key, pair.Value));
+        }
+
+        RefreshSegmentGrid();
+    }
+
+    private void PickPolylineForSelectedCable()
+    {
+        if (_cablePicker.SelectedItem is not CableItem selected)
+        {
+            MessageBox.Show(this, "Kies eerst een kabeltype.", "Kabeltype ontbreekt", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        var picked = AutoCadSelectionReader.PickSinglePolyline(this, selected.CableName);
+        if (picked.Cancelled)
+        {
+            if (!string.IsNullOrWhiteSpace(picked.Message))
+                _message.Text = picked.Message;
+            return;
+        }
+
+        _segments.Add(new CableSegment(selected.CableName, picked.LengthMeters));
+        RefreshSegmentGrid();
+        ResetResult();
+
+        var totalForType = _segments
+            .Where(x => x.CableName.Equals(selected.CableName, StringComparison.OrdinalIgnoreCase))
+            .Sum(x => x.LengthMeters);
+
+        _message.Text =
+            $"Toegevoegd: {selected.CableName} — {picked.LengthMeters:0.00} m. " +
+            $"Totaal {selected.CableName} in deze richting: {totalForType:0.00} m." +
+            (string.IsNullOrWhiteSpace(picked.Message) ? string.Empty : Environment.NewLine + picked.Message);
+    }
+
+    private void RemoveSelectedSegment()
+    {
+        if (_grid.SelectedRows.Count == 0)
+            return;
+
+        var indices = _grid.SelectedRows
+            .Cast<DataGridViewRow>()
+            .Select(row => row.Index)
+            .Distinct()
+            .OrderByDescending(index => index)
+            .ToArray();
+
+        foreach (var index in indices)
+        {
+            if (index >= 0 && index < _segments.Count)
+                _segments.RemoveAt(index);
+        }
+
+        RefreshSegmentGrid();
+        ResetResult();
+        _message.Text = indices.Length == 1
+            ? "Segment verwijderd."
+            : $"{indices.Length} segmenten verwijderd.";
+    }
+
+    private void RefreshSegmentGrid()
+    {
+        _grid.Rows.Clear();
+        for (var i = 0; i < _segments.Count; i++)
+        {
+            var segment = _segments[i];
+            _grid.Rows.Add(i + 1, segment.CableName, segment.LengthMeters);
         }
     }
 
-    private void ClearLengths()
+    private void ResetDirection()
     {
-        foreach (DataGridViewRow row in _grid.Rows)
-            row.Cells["Length"].Value = string.Empty;
-
+        _segments.Clear();
+        RefreshSegmentGrid();
         ResetResult();
+        _message.Text = "Richting gereset. Kies een kabeltype en voeg de eerste polyline van de nieuwe richting toe.";
     }
 
     private void Calculate()
     {
         try
         {
-            var segments = ReadSegments();
             var selectedProfile = ((ProfileItem)_profile.SelectedItem!).Profile;
-            var result = _engine.Calculate(segments, selectedProfile);
+            var result = _engine.Calculate(_segments, selectedProfile);
             ShowResult(result);
         }
         catch (Exception ex)
         {
             MessageBox.Show(this, ex.Message, "Kan niet berekenen", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
-    }
-
-    private IReadOnlyList<CableSegment> ReadSegments()
-    {
-        var segments = new List<CableSegment>();
-
-        foreach (DataGridViewRow row in _grid.Rows)
-        {
-            var cableName = Convert.ToString(row.Cells["Cable"].Value, CultureInfo.InvariantCulture) ?? string.Empty;
-            var raw = Convert.ToString(row.Cells["Length"].Value, CultureInfo.CurrentCulture)?.Trim();
-            if (string.IsNullOrWhiteSpace(raw))
-                continue;
-
-            if (!double.TryParse(raw, NumberStyles.Float, CultureInfo.CurrentCulture, out var length) &&
-                !double.TryParse(raw.Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out length))
-            {
-                throw new InvalidOperationException($"Ongeldige lengte bij {cableName}: '{raw}'.");
-            }
-
-            if (length < 0)
-                throw new InvalidOperationException($"Lengte kan niet negatief zijn bij {cableName}.");
-
-            if (length > 0)
-                segments.Add(new CableSegment(cableName, length));
-        }
-
-        return segments;
     }
 
     private void ShowResult(CalculationResult result)
@@ -313,6 +375,11 @@ internal sealed class KabelCheckerForm : Form
         _ampacityResult.Text = $"Laagste stroombelastbaarheid in richting: {result.LimitingCableAmpacityA:0.0} A";
 
         var sb = new StringBuilder();
+        sb.AppendLine("Opgebouwde richting (gelijke typen samengevoegd):");
+        foreach (var segment in result.Segments)
+            sb.AppendLine($"- {segment.CableName}: {segment.LengthMeters:0.00} m");
+
+        sb.AppendLine();
         sb.AppendLine("gG   ontwerp   Z-limiet   imped.  kabel-I  resultaat");
         sb.AppendLine("------------------------------------------------------");
         foreach (var assessment in result.Assessments)
@@ -339,7 +406,7 @@ internal sealed class KabelCheckerForm : Form
         _impedanceResult.Text = string.Empty;
         _componentsResult.Text = string.Empty;
         _ampacityResult.Text = string.Empty;
-        _details.Text = "Druk op Bereken om alle gG-stappen te controleren.";
+        _details.Text = "Bouw eerst de richting op en druk daarna op Bereken richting.";
     }
 
     private static Label CreateSectionLabel(string text) => new()
@@ -358,6 +425,11 @@ internal sealed class KabelCheckerForm : Form
     }
 
     private sealed record ProfileItem(string Text, LoadProfile Profile)
+    {
+        public override string ToString() => Text;
+    }
+
+    private sealed record CableItem(string Text, string CableName)
     {
         public override string ToString() => Text;
     }
