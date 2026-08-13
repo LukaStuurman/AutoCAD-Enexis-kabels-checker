@@ -41,7 +41,7 @@ INSTALLATIEMAP
 C:\Program Files\Autodesk\ApplicationPlugins\EnexisKabelChecker.bundle
 
 VERSIE
-1.5.0
+1.5.1
 
 OPMERKING
 Deze release is bedoeld voor AutoCAD 2025/2026 op Windows 64-bit. De bundle gebruikt Platform="AutoCAD*" en is daarmee ook bedoeld voor AutoCAD-gebaseerde producten zoals Civil 3D 2025/2026.
