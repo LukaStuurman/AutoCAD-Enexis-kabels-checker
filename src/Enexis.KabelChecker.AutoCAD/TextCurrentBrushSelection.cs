@@ -67,7 +67,7 @@ internal static class TextCurrentBrushSelection
 
         editor.WriteMessage(
             $"\nRonde stroomselectie actief. Straal: {radiusMeters.ToString("0.0", DutchCulture)} m. " +
-            "Klik = alle geldige teksten binnen de cirkel toevoegen; Shift+klik = eerder geselecteerde teksten binnen de cirkel verwijderen; Enter = klaar.");
+            "Klik of sleep met links = toevoegen; Shift+klik/sleep = eerder geselecteerde teksten verwijderen; Enter = klaar.");
 
         foreach (var id in initialSelectedIds)
             SetEntityHighlight(database, id, true);
@@ -90,51 +90,60 @@ internal static class TextCurrentBrushSelection
                         "Cirkelselectie geannuleerd.");
                 }
 
-                if (jig.ShiftPressed)
+                var strokeSamples = jig.GetCompletedStrokeSamples();
+                if (strokeSamples.Count == 0)
+                    continue;
+
+                var strokeAdded = 0;
+                var strokeRemoved = 0;
+
+                foreach (var sample in strokeSamples)
                 {
-                    var found = FindCandidatesWithinCircle(
-                        jig.Center,
-                        radiusDrawingUnits,
-                        candidates,
-                        candidate => workingSelectedIds.Contains(candidate.Id));
-
-                    if (found.Count == 0)
+                    if (sample.RemoveMode)
                     {
-                        editor.WriteMessage("\nGeen eerder geselecteerde stroomteksten binnen de cirkel om te verwijderen.");
-                        continue;
-                    }
+                        var found = FindCandidatesWithinCircle(
+                            sample.Center,
+                            radiusDrawingUnits,
+                            candidates,
+                            candidate => workingSelectedIds.Contains(candidate.Id));
 
-                    foreach (var candidate in found)
+                        foreach (var candidate in found)
+                        {
+                            if (!workingSelectedIds.Remove(candidate.Id))
+                                continue;
+
+                            SetEntityHighlight(database, candidate.Id, false);
+                            strokeRemoved++;
+                        }
+                    }
+                    else
                     {
-                        workingSelectedIds.Remove(candidate.Id);
-                        SetEntityHighlight(database, candidate.Id, false);
-                    }
+                        var found = FindCandidatesWithinCircle(
+                            sample.Center,
+                            radiusDrawingUnits,
+                            candidates,
+                            candidate => !workingSelectedIds.Contains(candidate.Id));
 
-                    editor.WriteMessage(
-                        $"\n{found.Count} tekst(en) gedeselecteerd ({workingSelectedIds.Count} object(en) blijven geselecteerd)." );
+                        foreach (var candidate in found)
+                        {
+                            if (!workingSelectedIds.Add(candidate.Id))
+                                continue;
+
+                            SetEntityHighlight(database, candidate.Id, true);
+                            strokeAdded++;
+                        }
+                    }
+                }
+
+                if (strokeAdded == 0 && strokeRemoved == 0)
+                {
+                    editor.WriteMessage("\nGeen ontwerpstroomteksten gewijzigd langs deze cirkelbeweging.");
                 }
                 else
                 {
-                    var found = FindCandidatesWithinCircle(
-                        jig.Center,
-                        radiusDrawingUnits,
-                        candidates,
-                        candidate => !workingSelectedIds.Contains(candidate.Id));
-
-                    if (found.Count == 0)
-                    {
-                        editor.WriteMessage("\nGeen nieuwe geldige stroomteksten binnen de cirkel.");
-                        continue;
-                    }
-
-                    foreach (var candidate in found)
-                    {
-                        workingSelectedIds.Add(candidate.Id);
-                        SetEntityHighlight(database, candidate.Id, true);
-                    }
-
                     editor.WriteMessage(
-                        $"\n{found.Count} tekst(en) toegevoegd ({workingSelectedIds.Count} object(en) geselecteerd)." );
+                        $"\nBorstel: {strokeAdded} toegevoegd, {strokeRemoved} gedeselecteerd " +
+                        $"({workingSelectedIds.Count} object(en) geselecteerd)." );
                 }
             }
 
@@ -154,7 +163,7 @@ internal static class TextCurrentBrushSelection
 
             var messages = new List<string>
             {
-                $"Cirkelwijziging: {addedValues.Count} toegevoegd, {removedValues.Count} gedeselecteerd.",
+                $"Cirkelborstel: {addedValues.Count} toegevoegd, {removedValues.Count} gedeselecteerd.",
                 $"Selectiestraal: {radiusMeters.ToString("0.0", DutchCulture)} m."
             };
             if (!string.IsNullOrWhiteSpace(unitWarning))
