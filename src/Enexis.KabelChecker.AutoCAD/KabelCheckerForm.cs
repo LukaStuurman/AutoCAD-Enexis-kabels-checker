@@ -22,7 +22,7 @@ internal sealed class KabelCheckerForm : Form
         IReadOnlyDictionary<string, double>? presetLengths = null,
         string? message = null)
     {
-        Text = "Enexis kabel checker";
+        Text = "Enexis kabel checker — gemaakt door Luka Stuurman";
         StartPosition = FormStartPosition.CenterScreen;
         Width = 840;
         Height = 690;
@@ -215,13 +215,22 @@ internal sealed class KabelCheckerForm : Form
         close.Click += (_, _) => Close();
         footer.Controls.Add(close);
 
-        var reset = new Button { Text = "Reset", AutoSize = true };
+        var reset = new Button { Text = "Reset", AutoSize = true, CausesValidation = false };
         reset.Click += (_, _) => ResetDirection();
         footer.Controls.Add(reset);
 
         var calculate = new Button { Text = "Bereken richting", AutoSize = true };
         calculate.Click += (_, _) => Calculate();
         footer.Controls.Add(calculate);
+
+        footer.Controls.Add(new Label
+        {
+            Text = "Gemaakt door Luka Stuurman",
+            AutoSize = true,
+            ForeColor = SystemColors.GrayText,
+            Padding = new Padding(0, 6, 0, 0),
+            Margin = new Padding(14, 0, 0, 0)
+        });
 
         root.Controls.Add(footer, 0, 6);
         Controls.Add(root);
@@ -446,8 +455,14 @@ internal sealed class KabelCheckerForm : Form
     {
         _segments.Clear();
         RefreshSegmentGrid();
-        ResetResult();
-        _message.Text = "Richting gereset. Voeg de eerste hele polyline of een deel tot knippunt toe.";
+
+        if (_profile.Items.Count > 0)
+            _profile.SelectedIndex = 0;
+        FillCablePicker();
+
+        _fuseResult.Text = "— gG";
+        _currentLoadPanel.ResetAll();
+        _message.Text = "Alles gereset: kabelrichting, berekeningsresultaat en ontwerpstroom zijn leeggemaakt.";
     }
 
     private void Calculate()
