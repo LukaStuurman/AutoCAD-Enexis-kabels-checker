@@ -28,18 +28,19 @@ ONTWERPSTROOM CONTROLEREN UIT TEXT/MTEXT
 2. Gebruik 'Cirkel' voor de ronde selectieborstel. De standaard 'Cirkelstraal [m]' is 3,0 m.
 3. Een losse linkerklik voegt alle geldige TEXT/MTEXT-objecten binnen de cirkel toe.
 4. Houd de linker muisknop ingedrukt en sleep om de cirkel als echte selectieborstel te gebruiken. Alle geldige teksten waar de cirkel tijdens de sleepbeweging overheen komt worden meegenomen.
-5. De borstel vult ook tussenpunten tussen opeenvolgende cursorposities op, zodat snel slepen geen gaten in het selectiepad geeft.
-6. Houd SHIFT ingedrukt tijdens klikken of slepen om eerder geselecteerde TEXT/MTEXT-objecten binnen het borstelpad te DESELECTEREN.
-7. Tijdens de cirkelselectie blijven geselecteerde tekstobjecten met AutoCAD's selectie-highlight zichtbaar. Enter rondt de cirkelselectie af.
-8. Gebruik 'Handmatig' wanneer je liever de normale AutoCAD-meervoudige selectie gebruikt. Handmatig geselecteerde tekstobjecten worden eveneens op objectniveau bijgehouden en kunnen later met Shift+cirkel worden gedeselecteerd.
-9. Hetzelfde TEXT/MTEXT-object wordt niet dubbel geteld wanneer je het nogmaals selecteert.
-10. Nieuwe Cirkel- en Handmatig-selecties worden bij de bestaande ontwerpstroomtabel opgeteld.
-11. De tabel toont Ontwerpstroom [A], Aantal en Subtotaal [A]. Ontwerpstroom en Aantal zijn direct per cel bewerkbaar; Subtotaal wordt automatisch bijgewerkt.
-12. Je kunt vrij tussen meerdere rijen/cellen klikken. Een handmatige celwijziging bouwt de DataGridView niet opnieuw op en springt dus niet terug naar de bovenste rij.
-13. Gelijke ontwerpstroomwaarden die via tekstselectie binnenkomen worden samengevoegd tot één rij. Een handmatige celwijziging wordt in-place verwerkt zodat de actieve rij behouden blijft.
-14. Gebruik 'Verwijder rij' om alleen de rij van de actieve cel te verwijderen.
-15. Onder de tabel staat het gezamenlijke totaal. Zonder actuele kabelberekening blijft dit totaal gewoon zichtbaar; na 'Bereken richting' verschijnt direct de groen/rode vergelijking met de maximaal toegestane ontwerpstroom.
-16. Waarden zoals 25, 25,5, 25.5 en 25,5 A worden ondersteund.
+5. Vanaf v1.7.1 wordt het loslaten van de linker muisknop direct door AutoCAD als eindpunt van de sleepbeweging verwerkt. Er is dus geen extra linkerklik meer nodig na het slepen.
+6. De borstel vult ook tussenpunten tussen opeenvolgende cursorposities op, zodat snel slepen geen gaten in het selectiepad geeft.
+7. Houd SHIFT ingedrukt tijdens klikken of slepen om eerder geselecteerde TEXT/MTEXT-objecten binnen het borstelpad te DESELECTEREN.
+8. Tijdens de cirkelselectie blijven geselecteerde tekstobjecten met AutoCAD's selectie-highlight zichtbaar. Enter rondt de cirkelselectie af.
+9. Gebruik 'Handmatig' wanneer je liever de normale AutoCAD-meervoudige selectie gebruikt. Handmatig geselecteerde tekstobjecten worden eveneens op objectniveau bijgehouden en kunnen later met Shift+cirkel worden gedeselecteerd.
+10. Hetzelfde TEXT/MTEXT-object wordt niet dubbel geteld wanneer je het nogmaals selecteert.
+11. Nieuwe Cirkel- en Handmatig-selecties worden bij de bestaande ontwerpstroomtabel opgeteld.
+12. De tabel toont Ontwerpstroom [A], Aantal en Subtotaal [A]. Ontwerpstroom en Aantal zijn direct per cel bewerkbaar; Subtotaal wordt automatisch bijgewerkt.
+13. Je kunt vrij tussen meerdere rijen/cellen klikken. Een handmatige celwijziging bouwt de DataGridView niet opnieuw op en springt dus niet terug naar de bovenste rij.
+14. Gelijke ontwerpstroomwaarden die via tekstselectie binnenkomen worden samengevoegd tot één rij. Een handmatige celwijziging wordt in-place verwerkt zodat de actieve rij behouden blijft.
+15. Gebruik 'Verwijder rij' om alleen de rij van de actieve cel te verwijderen.
+16. Onder de tabel staat het gezamenlijke totaal. Zonder actuele kabelberekening blijft dit totaal gewoon zichtbaar; na 'Bereken richting' verschijnt direct de groen/rode vergelijking met de maximaal toegestane ontwerpstroom.
+17. Waarden zoals 25, 25,5, 25.5 en 25,5 A worden ondersteund.
 
 VERWIJDEREN
 Dubbelklik VERWIJDEREN.bat en start AutoCAD/Civil 3D daarna opnieuw.
@@ -48,7 +49,7 @@ INSTALLATIEMAP
 C:\Program Files\Autodesk\ApplicationPlugins\EnexisKabelChecker.bundle
 
 VERSIE
-1.7.0
+1.7.1
 
 OPMERKING
 Deze release is bedoeld voor AutoCAD 2025/2026 op Windows 64-bit. De bundle gebruikt Platform="AutoCAD*" en is daarmee ook bedoeld voor AutoCAD-gebaseerde producten zoals Civil 3D 2025/2026.
