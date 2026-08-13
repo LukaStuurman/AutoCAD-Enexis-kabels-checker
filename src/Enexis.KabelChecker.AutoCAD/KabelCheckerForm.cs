@@ -16,6 +16,7 @@ internal sealed class KabelCheckerForm : Form
     private readonly Label _ampacityResult = new();
     private readonly TextBox _details = new();
     private readonly Label _message = new();
+    private readonly CurrentLoadPanel _currentLoadPanel = new();
     private readonly List<CableSegment> _segments = new();
 
     public KabelCheckerForm(
@@ -25,8 +26,8 @@ internal sealed class KabelCheckerForm : Form
         Text = "Enexis kabel checker - richting opbouwen";
         StartPosition = FormStartPosition.CenterScreen;
         Width = 980;
-        Height = 780;
-        MinimumSize = new Size(900, 650);
+        Height = 900;
+        MinimumSize = new Size(900, 760);
         AutoScaleMode = AutoScaleMode.Dpi;
         Font = new Font("Segoe UI", 9F);
 
@@ -46,7 +47,7 @@ internal sealed class KabelCheckerForm : Form
             Dock = DockStyle.Fill,
             Padding = new Padding(12),
             ColumnCount = 1,
-            RowCount = 7
+            RowCount = 8
         };
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
@@ -54,6 +55,7 @@ internal sealed class KabelCheckerForm : Form
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 42));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 58));
+        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
         var title = new Label
@@ -85,6 +87,7 @@ internal sealed class KabelCheckerForm : Form
         _profile.Items.Add(new ProfileItem("Evenredig verdeeld over kabel (50%)", LoadProfile.Evenredig));
         _profile.Items.Add(new ProfileItem("Geconcentreerd op laatste helft (75%)", LoadProfile.LaatsteHelft));
         _profile.SelectedIndex = 0;
+        _profile.SelectedIndexChanged += (_, _) => ResetResult();
         profilePanel.Controls.Add(_profile);
         root.Controls.Add(profilePanel, 0, 1);
 
@@ -178,6 +181,8 @@ internal sealed class KabelCheckerForm : Form
         resultPanel.Controls.Add(_details, 1, 0);
         root.Controls.Add(resultPanel, 0, 5);
 
+        root.Controls.Add(_currentLoadPanel, 0, 6);
+
         var footer = new FlowLayoutPanel
         {
             Dock = DockStyle.Fill,
@@ -197,7 +202,7 @@ internal sealed class KabelCheckerForm : Form
         calculate.Click += (_, _) => Calculate();
         footer.Controls.Add(calculate);
 
-        root.Controls.Add(footer, 0, 6);
+        root.Controls.Add(footer, 0, 7);
         Controls.Add(root);
         AcceptButton = calculate;
         CancelButton = close;
@@ -397,6 +402,7 @@ internal sealed class KabelCheckerForm : Form
         sb.AppendLine("Excelvoorwaarde: beide controles moeten voldoen.");
         sb.AppendLine("Kabelverjonging (zwaar naar dun) blijft een aparte ontwerpvoorwaarde.");
         _details.Text = sb.ToString();
+        _currentLoadPanel.SetCalculation(result);
     }
 
     private void ResetResult()
@@ -407,6 +413,7 @@ internal sealed class KabelCheckerForm : Form
         _componentsResult.Text = string.Empty;
         _ampacityResult.Text = string.Empty;
         _details.Text = "Bouw eerst de richting op en druk daarna op Bereken richting.";
+        _currentLoadPanel.SetCalculation(null);
     }
 
     private static Label CreateSectionLabel(string text) => new()
