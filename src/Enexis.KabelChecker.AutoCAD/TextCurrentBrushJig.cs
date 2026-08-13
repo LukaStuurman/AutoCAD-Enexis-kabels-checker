@@ -4,10 +4,6 @@ using Autodesk.AutoCAD.GraphicsInterface;
 
 namespace Enexis.KabelChecker.AutoCAD;
 
-/// <summary>
-/// Niet-destructieve AutoCAD-jig die een ronde selectieborstel rond de cursor tekent.
-/// Eén drag-cyclus levert één klikpunt op; Enter beëindigt de totale selectie.
-/// </summary>
 internal sealed class TextCurrentBrushJig : DrawJig
 {
     private readonly double _radiusDrawingUnits;
@@ -28,11 +24,9 @@ internal sealed class TextCurrentBrushJig : DrawJig
     protected override SamplerStatus Sampler(JigPrompts prompts)
     {
         var options = new JigPromptPointOptions(
-            "\nKlik nabij een stroomtekst; herhaal voor meer teksten of druk Enter om af te ronden: ")
+            "\nKlik om alle geldige stroomteksten binnen de cirkel toe te voegen; Enter rondt af: ")
         {
-            UserInputControls =
-                UserInputControls.Accept3dCoordinates |
-                UserInputControls.NullResponseAccepted
+            UserInputControls = UserInputControls.Accept3dCoordinates | UserInputControls.NullResponseAccepted
         };
 
         var result = prompts.AcquirePoint(options);
