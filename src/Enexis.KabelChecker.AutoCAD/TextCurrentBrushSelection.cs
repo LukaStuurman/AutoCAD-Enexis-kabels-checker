@@ -9,19 +9,39 @@ using AcApp = Autodesk.AutoCAD.ApplicationServices.Application;
 
 namespace Enexis.KabelChecker.AutoCAD;
 
+internal sealed record TextCurrentBrushSelectionResult(
+    bool Cancelled,
+    IReadOnlyList<TextCurrentObjectValue> AddedValues,
+    IReadOnlyList<TextCurrentObjectValue> RemovedValues,
+    string Message);
+
 internal static class TextCurrentBrushSelection
 {
     private static readonly CultureInfo DutchCulture = CultureInfo.GetCultureInfo("nl-NL");
     private static readonly Regex MTextFormatCode = new(@"\\[A-Za-z][^;]*;", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
-    public static TextCurrentSelectionResult Read(double radiusMeters)
+    public static TextCurrentBrushSelectionResult Read(
+        double radiusMeters,
+        IReadOnlyCollection<ObjectId>? selectedObjectIds = null)
     {
         if (radiusMeters <= 0 || double.IsNaN(radiusMeters) || double.IsInfinity(radiusMeters))
-            return new TextCurrentSelectionResult(true, Array.Empty<TextCurrentValue>(), 0, "De selectiestraal moet groter dan 0 meter zijn.");
+        {
+            return new TextCurrentBrushSelectionResult(
+                true,
+                Array.Empty<TextCurrentObjectValue>(),
+                Array.Empty<TextCurrentObjectValue>(),
+                "De selectiestraal moet groter dan 0 meter zijn.");
+        }
 
         var doc = AcApp.DocumentManager.MdiActiveDocument;
         if (doc is null)
-            return new TextCurrentSelectionResult(true, Array.Empty<TextCurrentValue>(), 0, "Geen actieve tekening.");
+        {
+            return new TextCurrentBrushSelectionResult(
+                true,
+                Array.Empty<TextCurrentObjectValue>(),
+                Array.Empty<TextCurrentObjectValue>(),
+                "Geen actieve tekening.");
+        }
 
         var editor = doc.Editor;
         var database = doc.Database;
@@ -31,12 +51,26 @@ internal static class TextCurrentBrushSelection
         var radiusDrawingUnits = radiusMeters / metersPerDrawingUnit;
         var candidates = LoadValidTextCandidates(database);
         if (candidates.Count == 0)
-            return new TextCurrentSelectionResult(false, Array.Empty<TextCurrentValue>(), 0, "Geen TEXT/MTEXT met precies één geldige stroomwaarde gevonden in de actieve ruimte.");
+        {
+            return new TextCurrentBrushSelectionResult(
+                false,
+                Array.Empty<TextCurrentObjectValue>(),
+                Array.Empty<TextCurrentObjectValue>(),
+                "Geen TEXT/MTEXT met precies één geldige stroomwaarde gevonden in de actieve ruimte.");
+        }
 
-        var selectedIds = new HashSet<ObjectId>();
-        var values = new List<TextCurrentValue>();
+        var candidateById = candidates.ToDictionary(x => x.Id);
+        var initialSelectedIds = new HashSet<ObjectId>(
+            (selectedObjectIds ?? Array.Empty<ObjectId>())
+                .Where(candidateById.ContainsKey));
+        var workingSelectedIds = new HashSet<ObjectId>(initialSelectedIds);
 
-        editor.WriteMessage($"\nRonde stroomselectie actief. Straal: {radiusMeters.ToString("0.0", DutchCulture)} m. Eén klik voegt alle geldige teksten binnen de cirkel toe; Enter rondt af.");
+        editor.WriteMessage(
+            $"\nRonde stroomselectie actief. Straal: {radiusMeters.ToString("0.0", DutchCulture)} m. " +
+            "Klik = alle geldige teksten binnen de cirkel toevoegen; Shift+klik = eerder geselecteerde teksten binnen de cirkel verwijderen; Enter = klaar.");
+
+        foreach (var id in initialSelectedIds)
+            SetEntityHighlight(database, id, true);
 
         try
         {
@@ -48,41 +82,99 @@ internal static class TextCurrentBrushSelection
                     break;
 
                 if (dragResult.Status != PromptStatus.OK)
-                    return new TextCurrentSelectionResult(true, Array.Empty<TextCurrentValue>(), 0, "Cirkelselectie geannuleerd.");
-
-                var found = FindCandidatesWithinCircle(jig.Center, radiusDrawingUnits, candidates, selectedIds);
-                if (found.Count == 0)
                 {
-                    editor.WriteMessage("\nGeen nieuwe geldige stroomteksten binnen de cirkel. Klik opnieuw of druk Enter.");
-                    continue;
+                    return new TextCurrentBrushSelectionResult(
+                        true,
+                        Array.Empty<TextCurrentObjectValue>(),
+                        Array.Empty<TextCurrentObjectValue>(),
+                        "Cirkelselectie geannuleerd.");
                 }
 
-                foreach (var candidate in found)
+                if (jig.ShiftPressed)
                 {
-                    selectedIds.Add(candidate.Id);
-                    values.Add(new TextCurrentValue(candidate.SourceText, candidate.Amps));
-                    SetEntityHighlight(database, candidate.Id, true);
-                }
+                    var found = FindCandidatesWithinCircle(
+                        jig.Center,
+                        radiusDrawingUnits,
+                        candidates,
+                        candidate => workingSelectedIds.Contains(candidate.Id));
 
-                editor.WriteMessage($"\n{found.Count} tekst(en) toegevoegd ({values.Count} totaal geselecteerd). Geselecteerde teksten blijven gemarkeerd tot Enter.");
+                    if (found.Count == 0)
+                    {
+                        editor.WriteMessage("\nGeen eerder geselecteerde stroomteksten binnen de cirkel om te verwijderen.");
+                        continue;
+                    }
+
+                    foreach (var candidate in found)
+                    {
+                        workingSelectedIds.Remove(candidate.Id);
+                        SetEntityHighlight(database, candidate.Id, false);
+                    }
+
+                    editor.WriteMessage(
+                        $"\n{found.Count} tekst(en) gedeselecteerd ({workingSelectedIds.Count} object(en) blijven geselecteerd)." );
+                }
+                else
+                {
+                    var found = FindCandidatesWithinCircle(
+                        jig.Center,
+                        radiusDrawingUnits,
+                        candidates,
+                        candidate => !workingSelectedIds.Contains(candidate.Id));
+
+                    if (found.Count == 0)
+                    {
+                        editor.WriteMessage("\nGeen nieuwe geldige stroomteksten binnen de cirkel.");
+                        continue;
+                    }
+
+                    foreach (var candidate in found)
+                    {
+                        workingSelectedIds.Add(candidate.Id);
+                        SetEntityHighlight(database, candidate.Id, true);
+                    }
+
+                    editor.WriteMessage(
+                        $"\n{found.Count} tekst(en) toegevoegd ({workingSelectedIds.Count} object(en) geselecteerd)." );
+                }
             }
+
+            var addedValues = workingSelectedIds
+                .Except(initialSelectedIds)
+                .Where(candidateById.ContainsKey)
+                .Select(id => candidateById[id])
+                .Select(ToObjectValue)
+                .ToList();
+
+            var removedValues = initialSelectedIds
+                .Except(workingSelectedIds)
+                .Where(candidateById.ContainsKey)
+                .Select(id => candidateById[id])
+                .Select(ToObjectValue)
+                .ToList();
 
             var messages = new List<string>
             {
-                values.Count == 0 ? "Geen stroomteksten toegevoegd met de cirkelselectie." : $"{values.Count} stroomwaarde(n) met de cirkelselectie toegevoegd.",
+                $"Cirkelwijziging: {addedValues.Count} toegevoegd, {removedValues.Count} gedeselecteerd.",
                 $"Selectiestraal: {radiusMeters.ToString("0.0", DutchCulture)} m."
             };
             if (!string.IsNullOrWhiteSpace(unitWarning))
                 messages.Add(unitWarning);
 
-            return new TextCurrentSelectionResult(false, values, 0, string.Join(Environment.NewLine, messages));
+            return new TextCurrentBrushSelectionResult(
+                false,
+                addedValues,
+                removedValues,
+                string.Join(Environment.NewLine, messages));
         }
         finally
         {
-            foreach (var id in selectedIds)
+            foreach (var id in initialSelectedIds.Union(workingSelectedIds))
                 SetEntityHighlight(database, id, false);
         }
     }
+
+    private static TextCurrentObjectValue ToObjectValue(TextCandidate candidate) =>
+        new(candidate.Id, candidate.SourceText, candidate.Amps);
 
     private static IReadOnlyList<TextCandidate> LoadValidTextCandidates(Database database)
     {
@@ -124,7 +216,9 @@ internal static class TextCurrentBrushSelection
                 min = extents.MinPoint;
                 max = extents.MaxPoint;
             }
-            catch (Autodesk.AutoCAD.Runtime.Exception) { }
+            catch (Autodesk.AutoCAD.Runtime.Exception)
+            {
+            }
 
             candidates.Add(new TextCandidate(id, sourceText, amps, min, max));
         }
@@ -133,9 +227,13 @@ internal static class TextCurrentBrushSelection
         return candidates;
     }
 
-    private static IReadOnlyList<TextCandidate> FindCandidatesWithinCircle(Point3d center, double radius, IReadOnlyList<TextCandidate> candidates, ISet<ObjectId> selectedIds) =>
+    private static IReadOnlyList<TextCandidate> FindCandidatesWithinCircle(
+        Point3d center,
+        double radius,
+        IReadOnlyList<TextCandidate> candidates,
+        Func<TextCandidate, bool> predicate) =>
         candidates
-            .Where(x => !selectedIds.Contains(x.Id))
+            .Where(predicate)
             .Select(x => (Candidate: x, Distance: DistanceToExtents2d(center, x.MinPoint, x.MaxPoint)))
             .Where(x => x.Distance <= radius + 1e-9)
             .OrderBy(x => x.Distance)
@@ -149,11 +247,16 @@ internal static class TextCurrentBrushSelection
             using var transaction = database.TransactionManager.StartOpenCloseTransaction();
             if (transaction.GetObject(id, OpenMode.ForRead) is Entity entity)
             {
-                if (highlight) entity.Highlight(); else entity.Unhighlight();
+                if (highlight)
+                    entity.Highlight();
+                else
+                    entity.Unhighlight();
             }
             transaction.Commit();
         }
-        catch (Autodesk.AutoCAD.Runtime.Exception) { }
+        catch (Autodesk.AutoCAD.Runtime.Exception)
+        {
+        }
     }
 
     private static double DistanceToExtents2d(Point3d point, Point3d min, Point3d max)
@@ -167,9 +270,12 @@ internal static class TextCurrentBrushSelection
 
     private static string CleanMTextContents(string contents)
     {
-        if (string.IsNullOrEmpty(contents)) return string.Empty;
+        if (string.IsNullOrEmpty(contents))
+            return string.Empty;
+
         var cleaned = MTextFormatCode.Replace(contents, string.Empty);
-        return cleaned.Replace("{", string.Empty, StringComparison.Ordinal)
+        return cleaned
+            .Replace("{", string.Empty, StringComparison.Ordinal)
             .Replace("}", string.Empty, StringComparison.Ordinal)
             .Replace("\\P", " ", StringComparison.OrdinalIgnoreCase)
             .Replace("\\~", " ", StringComparison.Ordinal);
@@ -196,5 +302,10 @@ internal static class TextCurrentBrushSelection
         return 1.0;
     }
 
-    private sealed record TextCandidate(ObjectId Id, string SourceText, double Amps, Point3d MinPoint, Point3d MaxPoint);
+    private sealed record TextCandidate(
+        ObjectId Id,
+        string SourceText,
+        double Amps,
+        Point3d MinPoint,
+        Point3d MaxPoint);
 }
