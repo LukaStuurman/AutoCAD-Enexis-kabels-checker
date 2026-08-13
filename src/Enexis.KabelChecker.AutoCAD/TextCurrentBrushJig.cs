@@ -33,7 +33,10 @@ internal sealed class TextCurrentBrushJig : DrawJig
         var options = new JigPromptPointOptions(
             "\nKlik/sleep = toevoegen, Shift+klik/sleep = deselecteren; Enter rondt af: ")
         {
-            UserInputControls = UserInputControls.Accept3dCoordinates | UserInputControls.NullResponseAccepted
+            UserInputControls =
+                UserInputControls.Accept3dCoordinates |
+                UserInputControls.NullResponseAccepted |
+                UserInputControls.AcceptMouseUpAsPoint
         };
 
         var result = prompts.AcquirePoint(options);
