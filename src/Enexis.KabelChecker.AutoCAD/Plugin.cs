@@ -2,6 +2,7 @@ using System.Text.RegularExpressions;
 using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
+using Autodesk.AutoCAD.Geometry;
 using Autodesk.AutoCAD.Runtime;
 using Enexis.KabelChecker.Core;
 using AcApp = Autodesk.AutoCAD.ApplicationServices.Application;
@@ -112,8 +113,13 @@ internal sealed record TextCurrentSelectionResult(
     bool Cancelled,
     IReadOnlyList<TextCurrentValue> Values,
     int InvalidTextObjects,
-    int NonTextObjects,
     string Message);
+
+internal enum TextCurrentSelectionMode
+{
+    Manual,
+    CrossingWindow
+}
 
 internal static class AutoCadSelectionReader
 {
@@ -121,7 +127,7 @@ internal static class AutoCadSelectionReader
         @"\\[A-Za-z][^;]*;",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
-    public static PolylinePickResult PickSinglePolyline(Form modelessForm, string cableName)
+    public static PolylinePickResult PickSinglePolyline(string cableName)
     {
         var doc = AcApp.DocumentManager.MdiActiveDocument;
         if (doc is null)
@@ -130,20 +136,9 @@ internal static class AutoCadSelectionReader
         var editor = doc.Editor;
         var database = doc.Database;
 
-        // Een modeless venster draait buiten de normale command-context. Autodesk
-        // adviseert daarom het actieve document te locken tijdens interactie vanuit
-        // een modeless UI. De lock bestaat alleen zolang de polyline wordt gekozen
-        // en de lengte wordt uitgelezen.
         using var documentLock = doc.LockDocument();
 
-        var options = new PromptEntityOptions(
-            $"\nSelecteer de polyline voor {cableName}: ");
-        options.SetRejectMessage("\nSelecteer een 2D- of 3D-polyline.");
-        options.AddAllowedClass(typeof(Polyline), false);
-        options.AddAllowedClass(typeof(Polyline2d), false);
-        options.AddAllowedClass(typeof(Polyline3d), false);
-
-        var picked = editor.GetEntity(options);
+        var picked = PromptForPolyline(editor, cableName);
         if (picked.Status != PromptStatus.OK)
             return new PolylinePickResult(true, 0, "Polyline-selectie geannuleerd.");
 
@@ -153,26 +148,100 @@ internal static class AutoCadSelectionReader
         if (transaction.GetObject(picked.ObjectId, OpenMode.ForRead) is not Curve curve)
             return new PolylinePickResult(true, 0, "Het geselecteerde object kon niet als polyline worden gelezen.");
 
-        double rawLength;
         try
         {
-            rawLength = Math.Abs(
-                curve.GetDistanceAtParameter(curve.EndParam) -
-                curve.GetDistanceAtParameter(curve.StartParam));
+            var rawLength = GetCurveLength(curve);
+            var lengthMeters = rawLength * unitFactor;
+            if (lengthMeters <= 0 || double.IsNaN(lengthMeters) || double.IsInfinity(lengthMeters))
+                return new PolylinePickResult(true, 0, "De geselecteerde polyline heeft geen geldige lengte.");
+
+            return new PolylinePickResult(false, lengthMeters, unitWarning);
         }
         catch (Autodesk.AutoCAD.Runtime.Exception ex)
         {
             return new PolylinePickResult(true, 0, $"Lengte kon niet worden bepaald: {ex.Message}");
         }
-
-        var lengthMeters = rawLength * unitFactor;
-        if (lengthMeters <= 0 || double.IsNaN(lengthMeters) || double.IsInfinity(lengthMeters))
-            return new PolylinePickResult(true, 0, "De geselecteerde polyline heeft geen geldige lengte.");
-
-        return new PolylinePickResult(false, lengthMeters, unitWarning);
     }
 
-    public static TextCurrentSelectionResult ReadSelectedTextCurrents()
+    public static PolylinePickResult PickPolylinePartToVirtualCut(string cableName)
+    {
+        var doc = AcApp.DocumentManager.MdiActiveDocument;
+        if (doc is null)
+            return new PolylinePickResult(true, 0, "Geen actieve tekening.");
+
+        var editor = doc.Editor;
+        var database = doc.Database;
+
+        using var documentLock = doc.LockDocument();
+
+        var picked = PromptForPolyline(editor, cableName);
+        if (picked.Status != PromptStatus.OK)
+            return new PolylinePickResult(true, 0, "Polyline-selectie geannuleerd.");
+
+        var unitFactor = GetMetersPerDrawingUnit(database.Insunits, out var unitWarning);
+
+        using var transaction = database.TransactionManager.StartTransaction();
+        if (transaction.GetObject(picked.ObjectId, OpenMode.ForRead) is not Curve curve)
+            return new PolylinePickResult(true, 0, "Het geselecteerde object kon niet als polyline worden gelezen.");
+
+        try
+        {
+            var totalRawLength = GetCurveLength(curve);
+            if (totalRawLength <= 0)
+                return new PolylinePickResult(true, 0, "De geselecteerde polyline heeft geen geldige lengte.");
+
+            if (curve.StartPoint.DistanceTo(curve.EndPoint) <= Math.Max(totalRawLength * 1e-9, 1e-8))
+            {
+                return new PolylinePickResult(
+                    true,
+                    0,
+                    "Virtueel knippen is alleen beschikbaar voor een open polyline; een gesloten polyline heeft geen eenduidige begin- en eindzijde.");
+            }
+
+            var cutPrompt = editor.GetPoint(new PromptPointOptions(
+                "\nKlik het virtuele knippunt op of nabij de polyline: "));
+            if (cutPrompt.Status != PromptStatus.OK)
+                return new PolylinePickResult(true, 0, "Virtueel knippunt geannuleerd.");
+
+            var cutOnCurve = curve.GetClosestPointTo(cutPrompt.Value, false);
+            var cutDistance = curve.GetDistAtPoint(cutOnCurve);
+
+            var sideOptions = new PromptPointOptions(
+                "\nKlik op het deel van de polyline waarvan je de lengte wilt gebruiken: ")
+            {
+                UseBasePoint = true,
+                BasePoint = cutOnCurve
+            };
+
+            var sidePrompt = editor.GetPoint(sideOptions);
+            if (sidePrompt.Status != PromptStatus.OK)
+                return new PolylinePickResult(true, 0, "Keuze van het kabeldeel geannuleerd.");
+
+            var sideOnCurve = curve.GetClosestPointTo(sidePrompt.Value, false);
+            var sideDistance = curve.GetDistAtPoint(sideOnCurve);
+            var selected = VirtualCutLengthCalculator.SelectLength(totalRawLength, cutDistance, sideDistance);
+
+            var lengthMeters = selected.Length * unitFactor;
+            var sideName = selected.Side == VirtualCutSide.Start ? "beginzijde" : "eindzijde";
+            var cutMeters = cutDistance * unitFactor;
+            var message =
+                $"Virtueel knippunt op {cutMeters:0.00} m vanaf het polylinebegin; {sideName} gekozen. " +
+                "De originele polyline is niet aangepast." +
+                (string.IsNullOrWhiteSpace(unitWarning) ? string.Empty : Environment.NewLine + unitWarning);
+
+            return new PolylinePickResult(false, lengthMeters, message);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return new PolylinePickResult(true, 0, ex.Message);
+        }
+        catch (Autodesk.AutoCAD.Runtime.Exception ex)
+        {
+            return new PolylinePickResult(true, 0, $"Virtuele kniplengte kon niet worden bepaald: {ex.Message}");
+        }
+    }
+
+    public static TextCurrentSelectionResult ReadSelectedTextCurrents(TextCurrentSelectionMode mode)
     {
         var doc = AcApp.DocumentManager.MdiActiveDocument;
         if (doc is null)
@@ -181,7 +250,6 @@ internal static class AutoCadSelectionReader
                 true,
                 Array.Empty<TextCurrentValue>(),
                 0,
-                0,
                 "Geen actieve tekening.");
         }
 
@@ -189,31 +257,73 @@ internal static class AutoCadSelectionReader
         var database = doc.Database;
 
         using var documentLock = doc.LockDocument();
+        var filter = CreateTextSelectionFilter();
 
-        var options = new PromptSelectionOptions
+        PromptSelectionResult selection;
+        if (mode == TextCurrentSelectionMode.CrossingWindow)
         {
-            MessageForAdding = "\nSelecteer TEXT/MTEXT met stroomwaarden en druk Enter: ",
-            MessageForRemoval = "\nVerwijder TEXT/MTEXT uit de selectie: "
-        };
+            var first = editor.GetPoint(new PromptPointOptions(
+                "\nEerste hoek van venster rond de stroomteksten: "));
+            if (first.Status != PromptStatus.OK)
+            {
+                return new TextCurrentSelectionResult(
+                    true,
+                    Array.Empty<TextCurrentValue>(),
+                    0,
+                    "Vensterselectie geannuleerd.");
+            }
 
-        var selection = editor.GetSelection(options);
-        if (selection.Status != PromptStatus.OK)
+            var secondOptions = new PromptPointOptions(
+                "\nTegenoverliggende hoek van het venster: ")
+            {
+                UseBasePoint = true,
+                BasePoint = first.Value
+            };
+
+            var second = editor.GetPoint(secondOptions);
+            if (second.Status != PromptStatus.OK)
+            {
+                return new TextCurrentSelectionResult(
+                    true,
+                    Array.Empty<TextCurrentValue>(),
+                    0,
+                    "Vensterselectie geannuleerd.");
+            }
+
+            selection = editor.SelectCrossingWindow(first.Value, second.Value, filter);
+            if (selection.Status != PromptStatus.OK)
+            {
+                return new TextCurrentSelectionResult(
+                    false,
+                    Array.Empty<TextCurrentValue>(),
+                    0,
+                    "Geen TEXT/MTEXT in het gekozen venster gevonden.");
+            }
+        }
+        else
         {
-            return new TextCurrentSelectionResult(
-                true,
-                Array.Empty<TextCurrentValue>(),
-                0,
-                0,
-                "Tekstselectie geannuleerd.");
+            var options = new PromptSelectionOptions
+            {
+                MessageForAdding = "\nSelecteer één of meer TEXT/MTEXT met stroomwaarden en druk Enter: ",
+                MessageForRemoval = "\nVerwijder tekst uit de selectie: "
+            };
+
+            selection = editor.GetSelection(options, filter);
+            if (selection.Status != PromptStatus.OK)
+            {
+                return new TextCurrentSelectionResult(
+                    true,
+                    Array.Empty<TextCurrentValue>(),
+                    0,
+                    "Tekstselectie geannuleerd.");
+            }
         }
 
         var values = new List<TextCurrentValue>();
         var invalidTextObjects = 0;
-        var nonTextObjects = 0;
         var invalidExamples = new List<string>();
 
         using var transaction = database.TransactionManager.StartTransaction();
-
         foreach (var id in selection.Value.GetObjectIds())
         {
             var dbObject = transaction.GetObject(id, OpenMode.ForRead);
@@ -225,10 +335,7 @@ internal static class AutoCadSelectionReader
             };
 
             if (sourceText is null)
-            {
-                nonTextObjects++;
                 continue;
-            }
 
             sourceText = sourceText.Trim();
             if (!CurrentTextParser.TryParseSingleCurrent(sourceText, out var amps))
@@ -253,21 +360,15 @@ internal static class AutoCadSelectionReader
         if (invalidTextObjects > 0)
         {
             var exampleText = invalidExamples.Count > 0
-                ? " Voorbeeld(en): " + string.Join(" | ", invalidExamples.Select(x => $"'{x}'")) + "."
+                ? " Voorbeeld(en): " + string.Join(" | ", invalidExamples)
                 : string.Empty;
-            messages.Add(
-                $"{invalidTextObjects} tekstobject(en) overgeslagen omdat er niet precies één geldig getal in stond." +
-                exampleText);
+            messages.Add($"{invalidTextObjects} tekstobject(en) overgeslagen omdat er niet precies één eenduidig getal in stond.{exampleText}");
         }
-
-        if (nonTextObjects > 0)
-            messages.Add($"{nonTextObjects} niet-TEXT/MTEXT object(en) genegeerd.");
 
         return new TextCurrentSelectionResult(
             false,
             values,
             invalidTextObjects,
-            nonTextObjects,
             string.Join(Environment.NewLine, messages));
     }
 
@@ -312,10 +413,7 @@ internal static class AutoCadSelectionReader
 
             try
             {
-                var rawLength = Math.Abs(
-                    curve.GetDistanceAtParameter(curve.EndParam) -
-                    curve.GetDistanceAtParameter(curve.StartParam));
-
+                var rawLength = GetCurveLength(curve);
                 var lengthMeters = rawLength * unitFactor;
                 lengths[cable.Name] = lengths.TryGetValue(cable.Name, out var current)
                     ? current + lengthMeters
@@ -347,22 +445,51 @@ internal static class AutoCadSelectionReader
         if (lengths.Count == 0)
             messages.Add("Er zijn geen kabeltypen automatisch herkend. Voeg de richting op via kabeltype + polyline.");
         else
-            messages.Add("Herkende lengtes zijn als segmenten overgenomen. Je kunt extra kabeldelen toevoegen voordat je berekent.");
+            messages.Add("Herkende lengtes zijn als segmenten overgenomen. Kabeltype en lengte zijn daarna in de tabel te wijzigen.");
 
         return new SelectionReadResult(false, lengths, string.Join(Environment.NewLine, messages));
     }
 
+    private static PromptEntityResult PromptForPolyline(Editor editor, string cableName)
+    {
+        var options = new PromptEntityOptions(
+            $"\nSelecteer de polyline voor {cableName}: ");
+        options.SetRejectMessage("\nSelecteer een 2D- of 3D-polyline.");
+        options.AddAllowedClass(typeof(Polyline), false);
+        options.AddAllowedClass(typeof(Polyline2d), false);
+        options.AddAllowedClass(typeof(Polyline3d), false);
+        return editor.GetEntity(options);
+    }
+
+    private static SelectionFilter CreateTextSelectionFilter()
+    {
+        var values = new[]
+        {
+            new TypedValue((int)DxfCode.Operator, "<or"),
+            new TypedValue((int)DxfCode.Start, "TEXT"),
+            new TypedValue((int)DxfCode.Start, "MTEXT"),
+            new TypedValue((int)DxfCode.Operator, "or>")
+        };
+        return new SelectionFilter(values);
+    }
+
+    private static double GetCurveLength(Curve curve) =>
+        Math.Abs(
+            curve.GetDistanceAtParameter(curve.EndParam) -
+            curve.GetDistanceAtParameter(curve.StartParam));
+
     private static string CleanMTextContents(string contents)
     {
-        var cleaned = contents
-            .Replace(@"\P", " ", StringComparison.OrdinalIgnoreCase)
-            .Replace(@"\~", " ", StringComparison.Ordinal);
+        if (string.IsNullOrEmpty(contents))
+            return string.Empty;
 
-        cleaned = MTextFormatCode.Replace(cleaned, string.Empty);
-        return cleaned
+        var cleaned = MTextFormatCode.Replace(contents, string.Empty);
+        cleaned = cleaned
             .Replace("{", string.Empty, StringComparison.Ordinal)
             .Replace("}", string.Empty, StringComparison.Ordinal)
-            .Trim();
+            .Replace("\\P", " ", StringComparison.OrdinalIgnoreCase)
+            .Replace("\\~", " ", StringComparison.Ordinal);
+        return cleaned;
     }
 
     private static double GetMetersPerDrawingUnit(UnitsValue units, out string warning)
