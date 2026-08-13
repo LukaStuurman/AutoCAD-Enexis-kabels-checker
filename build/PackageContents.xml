@@ -4,8 +4,8 @@
   AutodeskProduct="AutoCAD"
   ProductType="Application"
   Name="Enexis Kabel Checker"
-  AppVersion="1.0.1"
-  Description="Controleert gG-afzekering en maximale ontwerpstroom op basis van Eea-0205.K."
+  AppVersion="1.1.0"
+  Description="Controleert gG-afzekering, maximale ontwerpstroom en geselecteerde tekstbelastingen op basis van Eea-0205.K."
   Author="LukaStuurman"
   ProductCode="{A2860F05-1A53-4896-8D0D-2352653188A7}"
   UpgradeCode="{D7C51584-3C82-44BF-A614-3CF43BA51D41}">
