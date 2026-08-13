@@ -30,12 +30,13 @@ ONTWERPSTROOM CONTROLEREN UIT TEXT/MTEXT
 6. Gebruik 'Handmatig' wanneer je liever de normale AutoCAD-meervoudige selectie gebruikt. Handmatig geselecteerde tekstobjecten worden eveneens op objectniveau bijgehouden en kunnen later met Shift+cirkel worden gedeselecteerd.
 7. Hetzelfde TEXT/MTEXT-object wordt niet dubbel geteld wanneer je het nogmaals selecteert.
 8. Nieuwe Cirkel- en Handmatig-selecties worden bij de bestaande ontwerpstroomtabel opgeteld.
-9. De tabel toont Ontwerpstroom [A], Aantal en Subtotaal [A]. Ontwerpstroom en Aantal zijn direct bewerkbaar; Subtotaal wordt automatisch berekend.
-10. Gelijke ontwerpstroomwaarden worden samengevoegd tot één rij.
-11. Gebruik 'Verwijder rij' om alleen de geselecteerde ontwerpstroomrij te verwijderen.
-12. Onder de tabel staat het gezamenlijke totaal. Zonder actuele kabelberekening blijft dit totaal gewoon zichtbaar; na 'Bereken richting' verschijnt direct de groen/rode vergelijking met de maximaal toegestane ontwerpstroom.
-13. Waarden zoals 25, 25,5, 25.5 en 25,5 A worden ondersteund.
-14. De uitgestelde tabelrefresh uit v1.5.2 blijft actief om de WinForms DataGridView reentrant SetCurrentCellAddressCore-crash te voorkomen.
+9. De tabel toont Ontwerpstroom [A], Aantal en Subtotaal [A]. Ontwerpstroom en Aantal zijn direct per cel bewerkbaar; Subtotaal wordt automatisch bijgewerkt.
+10. Je kunt vrij tussen meerdere rijen/cellen klikken. Een handmatige celwijziging bouwt de DataGridView niet opnieuw op en springt dus niet terug naar de bovenste rij.
+11. Gelijke ontwerpstroomwaarden die via tekstselectie binnenkomen worden samengevoegd tot één rij. Een handmatige celwijziging wordt in-place verwerkt zodat de actieve rij behouden blijft.
+12. Gebruik 'Verwijder rij' om alleen de rij van de actieve cel te verwijderen.
+13. Onder de tabel staat het gezamenlijke totaal. Zonder actuele kabelberekening blijft dit totaal gewoon zichtbaar; na 'Bereken richting' verschijnt direct de groen/rode vergelijking met de maximaal toegestane ontwerpstroom.
+14. Waarden zoals 25, 25,5, 25.5 en 25,5 A worden ondersteund.
+15. Vanaf v1.6.1 worden handmatige wijzigingen van Ontwerpstroom/Aantal in-place verwerkt. Daarmee blijft de focus op de gekozen rij en wordt tegelijk de eerdere DataGridView reentrant SetCurrentCellAddressCore-crash vermeden.
 
 VERWIJDEREN
 Dubbelklik VERWIJDEREN.bat en start AutoCAD/Civil 3D daarna opnieuw.
@@ -44,7 +45,7 @@ INSTALLATIEMAP
 C:\Program Files\Autodesk\ApplicationPlugins\EnexisKabelChecker.bundle
 
 VERSIE
-1.6.0
+1.6.1
 
 OPMERKING
 Deze release is bedoeld voor AutoCAD 2025/2026 op Windows 64-bit. De bundle gebruikt Platform="AutoCAD*" en is daarmee ook bedoeld voor AutoCAD-gebaseerde producten zoals Civil 3D 2025/2026.
