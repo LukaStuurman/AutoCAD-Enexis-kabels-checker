@@ -9,13 +9,23 @@ INSTALLEREN
 5. Start AutoCAD 2025 of 2026.
 6. Typ ENEXISKABELCHECK in de AutoCAD-opdrachtregel.
 
-GEBRUIK
+GEBRUIK KABELRICHTING
 - Kies een kabeltype, bijvoorbeeld 4*150mm2 Al.
 - Klik 'Polyline kiezen + toevoegen'.
 - Klik de polyline in de tekening aan; de lengte wordt automatisch uitgelezen.
 - Voeg eventueel meer kabeltypen/polylines van dezelfde richting toe.
 - Klik 'Bereken richting'.
+- Het venster blijft modeless: je kunt ondertussen in Model Space blijven zoomen en pannen.
 - Gebruik 'Reset richting' voor de volgende richting.
+
+BELASTING CONTROLEREN UIT TEXT/MTEXT
+1. Bereken eerst de kabelrichting zodat de maximale ontwerpstroom bekend is.
+2. Klik 'Tekststromen selecteren + toetsen'.
+3. Selecteer meerdere AutoCAD TEXT/MTEXT-objecten met stroomwaarden en druk Enter.
+4. Waarden zoals 25, 25,5, 25.5 en 25,5 A worden ondersteund.
+5. De plugin telt de geldige waarden op en vergelijkt de som met de maximale ontwerpstroom.
+6. Een groot groen vinkje betekent dat de belasting past; een groot rood kruis betekent dat de maximale ontwerpstroom wordt overschreden.
+7. Tekst zonder precies één eenduidig getal wordt overgeslagen en gemeld.
 
 VERWIJDEREN
 Dubbelklik VERWIJDEREN.bat en start AutoCAD daarna opnieuw.
@@ -24,7 +34,7 @@ INSTALLATIEMAP
 C:\Program Files\Autodesk\ApplicationPlugins\EnexisKabelChecker.bundle
 
 VERSIE
-1.0.0
+1.1.0
 
 OPMERKING
 Deze release is bedoeld voor AutoCAD 2025 en AutoCAD 2026 op Windows 64-bit.
