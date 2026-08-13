@@ -6,7 +6,7 @@ INSTALLEREN
 2. Pak deze ZIP helemaal uit naar een normale map.
 3. Dubbelklik INSTALLEREN.bat.
 4. Bevestig de Windows UAC-melding.
-5. Start AutoCAD 2025 of 2026.
+5. Start AutoCAD 2025, AutoCAD 2026 of een AutoCAD-gebaseerd product zoals Civil 3D 2025/2026.
 6. Typ ENEXISKABELCHECK in de AutoCAD-opdrachtregel.
 
 GEBRUIK KABELRICHTING
@@ -15,35 +15,34 @@ GEBRUIK KABELRICHTING
 - Of klik 'Deel tot knippunt': selecteer de polyline, klik een virtueel knippunt en klik daarna op de zijde die je wilt meenemen.
 - De originele AutoCAD-polyline wordt bij virtueel knippen niet gewijzigd.
 - Kabeltype en lengte zijn na toevoegen direct bewerkbaar in de tabel.
-- Voeg eventueel meer kabeldelen van dezelfde richting toe.
-- Klik 'Bereken richting'.
-- Het venster blijft modeless: je kunt ondertussen in Model Space zoomen, pannen en verder werken.
+- Onder de kabeltabel staat altijd de totale lengte van alle kabelsegmenten samen.
+- Gebruik 'Verwijder rij' om alleen het geselecteerde kabelsegment te verwijderen.
+- Klik 'Bereken richting'. Het resultaatblok toont alleen de hoogste toegestane gG-zekering; de uitgebreide Excel-/tussenresultaatweergave is verwijderd.
 - Gebruik 'Reset' voor de volgende richting.
 
-BELASTING CONTROLEREN UIT TEXT/MTEXT
-1. Bereken eerst de kabelrichting zodat de maximale ontwerpstroom bekend is.
-2. Gebruik 'Cirkel' voor de ronde selectieborstel. Stel de grootte in bij 'Cirkelstraal [m]'; standaard 2,0 m.
-3. Klik nabij een stroomtekst. De dichtstbijzijnde geldige TEXT/MTEXT binnen de cirkel wordt toegevoegd.
-4. Een gekozen tekst blijft tijdens de cirkelselectie zichtbaar gemarkeerd met AutoCAD's eigen selectie-highlight.
-5. Blijf klikken om meerdere teksten toe te voegen en druk Enter wanneer je klaar bent.
-6. Gebruik 'Handmatig' wanneer je liever de normale AutoCAD-meervoudige selectie gebruikt.
-7. Zowel Cirkel als Handmatig voegen nieuwe ontwerpstroomteksten toe aan de reeds opgebouwde selectie; eerdere waarden blijven dus staan.
-8. Gebruik 'Wis' wanneer je de opgebouwde ontwerpstroomselectie helemaal opnieuw wilt beginnen.
-9. Het kleine overzicht groepeert gelijke ontwerpstromen en toont Ontwerpstroom [A], Aantal en Subtotaal [A]. Onder de tabel staat het gezamenlijke totaal.
-10. Waarden zoals 25, 25,5, 25.5 en 25,5 A worden ondersteund.
-11. De plugin vergelijkt het totale ontwerpstroomvermogen met de maximale ontwerpstroom van de berekende kabelrichting.
-12. Een groot groen vinkje betekent dat de belasting past; een groot rood kruis betekent dat de maximale ontwerpstroom wordt overschreden.
-13. Wanneer de kabelrichting of het profiel verandert en opnieuw moet worden berekend, wordt de oude ontwerpstroomselectie gewist om een verouderde vergelijking te voorkomen.
+ONTWERPSTROOM CONTROLEREN UIT TEXT/MTEXT
+1. Bereken eerst de kabelrichting.
+2. Gebruik 'Cirkel' voor de ronde selectieborstel en stel de gewenste 'Cirkelstraal [m]' in.
+3. Eén klik met de cirkel voegt ALLE geldige TEXT/MTEXT-objecten binnen de cirkel toe. De gekozen teksten worden tijdens de selectie gemarkeerd.
+4. Blijf klikken om meer gebieden toe te voegen en druk Enter wanneer je klaar bent.
+5. Gebruik 'Handmatig' wanneer je liever de normale AutoCAD-meervoudige selectie gebruikt.
+6. Nieuwe Cirkel- en Handmatig-selecties worden bij de bestaande ontwerpstroomtabel opgeteld.
+7. De tabel toont Ontwerpstroom [A], Aantal en Subtotaal [A]. Ontwerpstroom en Aantal zijn direct bewerkbaar; Subtotaal wordt automatisch berekend.
+8. Gelijke ontwerpstroomwaarden worden samengevoegd tot één rij.
+9. Gebruik 'Verwijder rij' om alleen de geselecteerde ontwerpstroomrij te verwijderen.
+10. Onder de tabel staat het gezamenlijke totaal.
+11. Waarden zoals 25, 25,5, 25.5 en 25,5 A worden ondersteund.
+12. Een groot groen vinkje betekent dat de totale ontwerpstroom binnen de toegestane ontwerpstroom van de kabelrichting blijft; een rood kruis betekent overschrijding.
 
 VERWIJDEREN
-Dubbelklik VERWIJDEREN.bat en start AutoCAD daarna opnieuw.
+Dubbelklik VERWIJDEREN.bat en start AutoCAD/Civil 3D daarna opnieuw.
 
 INSTALLATIEMAP
 C:\Program Files\Autodesk\ApplicationPlugins\EnexisKabelChecker.bundle
 
 VERSIE
-1.4.0
+1.5.0
 
 OPMERKING
-Deze release is bedoeld voor AutoCAD 2025 en AutoCAD 2026 op Windows 64-bit en gebruikt alleen de AutoCAD .NET API, waardoor dezelfde bundle ook bedoeld is voor AutoCAD-gebaseerde producten zoals Civil 3D 2025/2026.
-De precieze selectie-highlight (bijvoorbeeld blauwe gloed) volgt de actieve AutoCAD-instellingen voor selectie-effecten.
+Deze release is bedoeld voor AutoCAD 2025/2026 op Windows 64-bit. De bundle gebruikt Platform="AutoCAD*" en is daarmee ook bedoeld voor AutoCAD-gebaseerde producten zoals Civil 3D 2025/2026.
+De precieze selectie-highlight volgt de actieve AutoCAD-instellingen voor selectie-effecten.
