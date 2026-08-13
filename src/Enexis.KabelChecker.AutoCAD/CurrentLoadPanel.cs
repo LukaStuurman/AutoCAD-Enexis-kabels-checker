@@ -19,6 +19,7 @@ internal sealed class CurrentLoadPanel : UserControl
     private readonly List<CurrentLoadRow> _rows = new();
     private CalculationResult? _calculation;
     private bool _refreshingOverview;
+    private bool _overviewRefreshQueued;
 
     public CurrentLoadPanel()
     {
@@ -260,19 +261,19 @@ internal sealed class CurrentLoadPanel : UserControl
 
     private void SelectWithBrush()
     {
-        if (!CanSelect())
+        if (!CanSelectCurrents())
             return;
         AddSelection(TextCurrentBrushSelection.Read((double)_radiusMeters.Value));
     }
 
     private void SelectManually()
     {
-        if (!CanSelect())
+        if (!CanSelectCurrents())
             return;
         AddSelection(AutoCadSelectionReader.ReadSelectedTextCurrents(TextCurrentSelectionMode.Manual));
     }
 
-    private bool CanSelect()
+    private bool CanSelectCurrents()
     {
         if (_calculation?.MaxDesignCurrentAmps is int)
             return true;
@@ -292,8 +293,10 @@ internal sealed class CurrentLoadPanel : UserControl
         foreach (var value in selection.Values)
         {
             var existing = _rows.FirstOrDefault(x => Math.Abs(x.Amps - value.Amps) <= 1e-9);
-            if (existing is null) _rows.Add(new CurrentLoadRow(value.Amps, 1));
-            else existing.Count++;
+            if (existing is null)
+                _rows.Add(new CurrentLoadRow(value.Amps, 1));
+            else
+                existing.Count++;
         }
 
         NormalizeRows();
@@ -303,9 +306,13 @@ internal sealed class CurrentLoadPanel : UserControl
 
     private void RemoveSelectedRow()
     {
-        if (_overview.CurrentRow is null) return;
+        if (_overview.CurrentRow is null)
+            return;
+
         var index = _overview.CurrentRow.Index;
-        if (index < 0 || index >= _rows.Count) return;
+        if (index < 0 || index >= _rows.Count)
+            return;
+
         _rows.RemoveAt(index);
         RefreshOverview();
         RefreshAssessment("Ontwerpstroomrij verwijderd.");
@@ -313,7 +320,9 @@ internal sealed class CurrentLoadPanel : UserControl
 
     private void Overview_CellValidating(object? sender, DataGridViewCellValidatingEventArgs e)
     {
-        if (_refreshingOverview || e.RowIndex < 0 || e.ColumnIndex < 0) return;
+        if (_refreshingOverview || e.RowIndex < 0 || e.ColumnIndex < 0)
+            return;
+
         var columnName = _overview.Columns[e.ColumnIndex].Name;
         var text = Convert.ToString(e.FormattedValue);
 
@@ -331,34 +340,61 @@ internal sealed class CurrentLoadPanel : UserControl
 
     private void Overview_CellEndEdit(object? sender, DataGridViewCellEventArgs e)
     {
-        if (_refreshingOverview || e.RowIndex < 0 || e.RowIndex >= _rows.Count || e.ColumnIndex < 0) return;
+        if (_refreshingOverview || e.RowIndex < 0 || e.RowIndex >= _rows.Count || e.ColumnIndex < 0)
+            return;
+
         var row = _rows[e.RowIndex];
         var columnName = _overview.Columns[e.ColumnIndex].Name;
 
         if (columnName == "Amps")
         {
             var text = Convert.ToString(_overview.Rows[e.RowIndex].Cells["Amps"].Value);
-            if (TryParsePositiveAmps(text, out var amps)) row.Amps = amps;
+            if (TryParsePositiveAmps(text, out var amps))
+                row.Amps = amps;
         }
         else if (columnName == "Count")
         {
             var text = Convert.ToString(_overview.Rows[e.RowIndex].Cells["Count"].Value);
-            if (TryParsePositiveCount(text, out var count)) row.Count = count;
+            if (TryParsePositiveCount(text, out var count))
+                row.Count = count;
         }
-        else return;
+        else
+        {
+            return;
+        }
 
         NormalizeRows();
-        RefreshOverview();
-        RefreshAssessment("Ontwerpstroomtabel aangepast.");
+        QueueOverviewRefresh("Ontwerpstroomtabel aangepast.");
+    }
+
+    private void QueueOverviewRefresh(string assessmentMessage)
+    {
+        if (_overviewRefreshQueued || IsDisposed || Disposing)
+            return;
+
+        _overviewRefreshQueued = true;
+        BeginInvoke(new Action(() =>
+        {
+            _overviewRefreshQueued = false;
+            if (IsDisposed || Disposing)
+                return;
+
+            RefreshOverview();
+            RefreshAssessment(assessmentMessage);
+        }));
     }
 
     private void NormalizeRows()
     {
-        if (_rows.Count <= 1) return;
-        var normalized = _rows.GroupBy(x => x.Amps)
+        if (_rows.Count <= 1)
+            return;
+
+        var normalized = _rows
+            .GroupBy(x => x.Amps)
             .Select(x => new CurrentLoadRow(x.Key, x.Sum(y => y.Count)))
             .OrderBy(x => x.Amps)
             .ToList();
+
         _rows.Clear();
         _rows.AddRange(normalized);
     }
@@ -370,24 +406,38 @@ internal sealed class CurrentLoadPanel : UserControl
         {
             _overview.Rows.Clear();
             foreach (var row in _rows)
-                _overview.Rows.Add(FormatAmps(row.Amps), row.Count.ToString(DutchCulture), FormatAmps(row.Amps * row.Count));
+            {
+                _overview.Rows.Add(
+                    FormatAmps(row.Amps),
+                    row.Count.ToString(DutchCulture),
+                    FormatAmps(row.Amps * row.Count));
+            }
         }
-        finally { _refreshingOverview = false; }
+        finally
+        {
+            _refreshingOverview = false;
+        }
 
         var total = _rows.Sum(x => x.Amps * x.Count);
         var count = _rows.Sum(x => x.Count);
-        _totalLabel.Text = count == 0 ? "Totaal: 0 A" : $"Totaal: {FormatAmps(total)} A  ({count}× ontwerpstroom)";
+        _totalLabel.Text = count == 0
+            ? "Totaal: 0 A"
+            : $"Totaal: {FormatAmps(total)} A  ({count}× ontwerpstroom)";
         UpdateRemoveButtonState();
     }
 
     private void RefreshAssessment(string? selectionMessage = null)
     {
-        if (_calculation?.MaxDesignCurrentAmps is not int maxAllowed) return;
+        if (_calculation?.MaxDesignCurrentAmps is not int maxAllowed)
+            return;
+
         var count = _rows.Sum(x => x.Count);
         var total = _rows.Sum(x => x.Amps * x.Count);
         if (count == 0)
         {
-            SetNeutral($"Maximaal toegestaan: {maxAllowed} A", selectionMessage ?? "Nog geen ontwerpstroom toegevoegd.");
+            SetNeutral(
+                $"Maximaal toegestaan: {maxAllowed} A",
+                selectionMessage ?? "Nog geen ontwerpstroom toegevoegd.");
             return;
         }
 
@@ -396,10 +446,19 @@ internal sealed class CurrentLoadPanel : UserControl
         _icon.Text = fits ? "✓" : "✕";
         _icon.ForeColor = fits ? Color.SeaGreen : Color.Firebrick;
         _summary.ForeColor = fits ? Color.SeaGreen : Color.Firebrick;
-        _summary.Text = fits ? $"PAST — {FormatAmps(total)} A ≤ {maxAllowed} A" : $"PAST NIET — {FormatAmps(total)} A > {maxAllowed} A";
-        var marginText = fits ? $"Marge {FormatAmps(difference)} A." : $"Overschrijding {FormatAmps(difference)} A.";
-        _details.Text = $"{count} ontwerpstroomwaarde{(count == 1 ? string.Empty : "n")} in totaal. {marginText}" +
-                        (string.IsNullOrWhiteSpace(selectionMessage) ? string.Empty : Environment.NewLine + selectionMessage);
+        _summary.Text = fits
+            ? $"PAST — {FormatAmps(total)} A ≤ {maxAllowed} A"
+            : $"PAST NIET — {FormatAmps(total)} A > {maxAllowed} A";
+
+        var marginText = fits
+            ? $"Marge {FormatAmps(difference)} A."
+            : $"Overschrijding {FormatAmps(difference)} A.";
+
+        _details.Text =
+            $"{count} ontwerpstroomwaarde{(count == 1 ? string.Empty : "n")} in totaal. {marginText}" +
+            (string.IsNullOrWhiteSpace(selectionMessage)
+                ? string.Empty
+                : Environment.NewLine + selectionMessage);
     }
 
     private void SetSelectionButtonsEnabled(bool enabled)
@@ -412,7 +471,10 @@ internal sealed class CurrentLoadPanel : UserControl
 
     private void UpdateRemoveButtonState()
     {
-        _removeRowButton.Enabled = _calculation?.MaxDesignCurrentAmps is int && _rows.Count > 0 && _overview.CurrentRow is not null;
+        _removeRowButton.Enabled =
+            _calculation?.MaxDesignCurrentAmps is int &&
+            _rows.Count > 0 &&
+            _overview.CurrentRow is not null;
     }
 
     private void SetNeutral(string summary, string details)
@@ -427,23 +489,35 @@ internal sealed class CurrentLoadPanel : UserControl
     private static bool TryParsePositiveAmps(string? text, out double value)
     {
         value = 0;
-        if (string.IsNullOrWhiteSpace(text)) return false;
+        if (string.IsNullOrWhiteSpace(text))
+            return false;
+
         var trimmed = text.Trim();
-        var parsed = double.TryParse(trimmed, NumberStyles.Float, DutchCulture, out value) || double.TryParse(trimmed, NumberStyles.Float, CultureInfo.InvariantCulture, out value);
+        var parsed =
+            double.TryParse(trimmed, NumberStyles.Float, DutchCulture, out value) ||
+            double.TryParse(trimmed, NumberStyles.Float, CultureInfo.InvariantCulture, out value);
+
         return parsed && value > 0 && !double.IsNaN(value) && !double.IsInfinity(value);
     }
 
     private static bool TryParsePositiveCount(string? text, out int value)
     {
         value = 0;
-        return !string.IsNullOrWhiteSpace(text) && int.TryParse(text.Trim(), NumberStyles.Integer, DutchCulture, out value) && value > 0;
+        return !string.IsNullOrWhiteSpace(text) &&
+               int.TryParse(text.Trim(), NumberStyles.Integer, DutchCulture, out value) &&
+               value > 0;
     }
 
     private static string FormatAmps(double value) => value.ToString("0.##", DutchCulture);
 
     private sealed class CurrentLoadRow
     {
-        public CurrentLoadRow(double amps, int count) { Amps = amps; Count = count; }
+        public CurrentLoadRow(double amps, int count)
+        {
+            Amps = amps;
+            Count = count;
+        }
+
         public double Amps { get; set; }
         public int Count { get; set; }
     }
