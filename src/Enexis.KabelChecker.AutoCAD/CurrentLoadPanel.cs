@@ -1,4 +1,5 @@
 using System.Globalization;
+using Autodesk.AutoCAD.DatabaseServices;
 using Enexis.KabelChecker.Core;
 
 namespace Enexis.KabelChecker.AutoCAD;
@@ -17,6 +18,7 @@ internal sealed class CurrentLoadPanel : UserControl
     private readonly Label _details = new();
     private readonly Label _icon = new();
     private readonly List<CurrentLoadRow> _rows = new();
+    private readonly Dictionary<ObjectId, double> _selectedTextObjects = new();
     private CalculationResult? _calculation;
     private bool _refreshingOverview;
     private bool _overviewRefreshQueued;
@@ -28,39 +30,15 @@ internal sealed class CurrentLoadPanel : UserControl
         Margin = new Padding(0, 2, 0, 4);
         BorderStyle = BorderStyle.FixedSingle;
         BuildUi();
+        RefreshOverview();
         SetCalculation(null);
     }
 
     public void SetCalculation(CalculationResult? calculation)
     {
         _calculation = calculation;
-        _rows.Clear();
-        RefreshOverview();
-
-        if (calculation is null)
-        {
-            SetSelectionButtonsEnabled(false);
-            SetNeutral(
-                "Bereken eerst de kabelrichting.",
-                "Daarna kun je ontwerpstroomteksten met de cirkel of handmatig toevoegen.");
-            return;
-        }
-
-        if (calculation.MaxDesignCurrentAmps is null)
-        {
-            SetSelectionButtonsEnabled(false);
-            _icon.Text = "✕";
-            _icon.ForeColor = Color.Firebrick;
-            _summary.Text = "Richting heeft geen toegestane ontwerpstroom";
-            _summary.ForeColor = Color.Firebrick;
-            _details.Text = "Voor deze kabelrichting is geen geldige ontwerpstroom beschikbaar.";
-            return;
-        }
-
-        SetSelectionButtonsEnabled(true);
-        SetNeutral(
-            $"Maximaal toegestaan: {calculation.MaxDesignCurrentAmps.Value} A",
-            "Voeg teksten toe met Cirkel of Handmatig. Ontwerpstroom en aantal zijn daarna direct in de tabel aanpasbaar.");
+        RefreshAssessment();
+        UpdateRemoveButtonState();
     }
 
     private void BuildUi()
@@ -151,7 +129,7 @@ internal sealed class CurrentLoadPanel : UserControl
 
         actionPanel.Controls.Add(new Label
         {
-            Text = "Cirkel: één klik voegt alle geldige TEXT/MTEXT binnen de cirkel toe. Handmatig blijft ook beschikbaar.",
+            Text = "Cirkel: klik = toevoegen, Shift+klik = eerder geselecteerde teksten binnen de cirkel deselecteren. Ontwerpstroom mag ook vóór de kabelberekening.",
             AutoSize = true,
             MaximumSize = new Size(300, 0),
             Margin = new Padding(0, 4, 0, 0)
@@ -261,28 +239,18 @@ internal sealed class CurrentLoadPanel : UserControl
 
     private void SelectWithBrush()
     {
-        if (!CanSelectCurrents())
-            return;
-        AddSelection(TextCurrentBrushSelection.Read((double)_radiusMeters.Value));
+        var result = TextCurrentBrushSelection.Read(
+            (double)_radiusMeters.Value,
+            _selectedTextObjects.Keys.ToArray());
+        ApplyBrushSelection(result);
     }
 
     private void SelectManually()
     {
-        if (!CanSelectCurrents())
-            return;
-        AddSelection(AutoCadSelectionReader.ReadSelectedTextCurrents(TextCurrentSelectionMode.Manual));
+        AddObjectSelection(TextCurrentManualSelection.Read());
     }
 
-    private bool CanSelectCurrents()
-    {
-        if (_calculation?.MaxDesignCurrentAmps is int)
-            return true;
-
-        MessageBox.Show(this, "Bereken eerst de kabelrichting zodat de maximale ontwerpstroom bekend is.", "Eerst richting berekenen", MessageBoxButtons.OK, MessageBoxIcon.Information);
-        return false;
-    }
-
-    private void AddSelection(TextCurrentSelectionResult selection)
+    private void ApplyBrushSelection(TextCurrentBrushSelectionResult selection)
     {
         if (selection.Cancelled)
         {
@@ -290,18 +258,86 @@ internal sealed class CurrentLoadPanel : UserControl
             return;
         }
 
-        foreach (var value in selection.Values)
+        var removed = 0;
+        foreach (var value in selection.RemovedValues)
         {
-            var existing = _rows.FirstOrDefault(x => Math.Abs(x.Amps - value.Amps) <= 1e-9);
-            if (existing is null)
-                _rows.Add(new CurrentLoadRow(value.Amps, 1));
-            else
-                existing.Count++;
+            if (!_selectedTextObjects.Remove(value.ObjectId, out var mappedAmps))
+                continue;
+
+            DecrementRow(mappedAmps);
+            removed++;
+        }
+
+        var added = 0;
+        foreach (var value in selection.AddedValues)
+        {
+            if (_selectedTextObjects.ContainsKey(value.ObjectId))
+                continue;
+
+            _selectedTextObjects[value.ObjectId] = value.Amps;
+            IncrementRow(value.Amps);
+            added++;
         }
 
         NormalizeRows();
         RefreshOverview();
-        RefreshAssessment(selection.Message);
+        RefreshAssessment(
+            $"Cirkel: {added} toegevoegd, {removed} gedeselecteerd." +
+            (string.IsNullOrWhiteSpace(selection.Message)
+                ? string.Empty
+                : Environment.NewLine + selection.Message));
+    }
+
+    private void AddObjectSelection(TextCurrentObjectSelectionResult selection)
+    {
+        if (selection.Cancelled)
+        {
+            _details.Text = selection.Message;
+            return;
+        }
+
+        var added = 0;
+        var alreadySelected = 0;
+        foreach (var value in selection.Values)
+        {
+            if (_selectedTextObjects.ContainsKey(value.ObjectId))
+            {
+                alreadySelected++;
+                continue;
+            }
+
+            _selectedTextObjects[value.ObjectId] = value.Amps;
+            IncrementRow(value.Amps);
+            added++;
+        }
+
+        NormalizeRows();
+        RefreshOverview();
+
+        var extra = alreadySelected > 0
+            ? Environment.NewLine + $"{alreadySelected} al geselecteerde tekstobject(en) niet dubbel toegevoegd."
+            : string.Empty;
+        RefreshAssessment(selection.Message + extra);
+    }
+
+    private void IncrementRow(double amps)
+    {
+        var existing = _rows.FirstOrDefault(x => SameAmps(x.Amps, amps));
+        if (existing is null)
+            _rows.Add(new CurrentLoadRow(amps, 1));
+        else
+            existing.Count++;
+    }
+
+    private void DecrementRow(double amps)
+    {
+        var existing = _rows.FirstOrDefault(x => SameAmps(x.Amps, amps));
+        if (existing is null)
+            return;
+
+        existing.Count--;
+        if (existing.Count <= 0)
+            _rows.Remove(existing);
     }
 
     private void RemoveSelectedRow()
@@ -313,6 +349,8 @@ internal sealed class CurrentLoadPanel : UserControl
         if (index < 0 || index >= _rows.Count)
             return;
 
+        var row = _rows[index];
+        RemoveTrackedObjectsForAmps(row.Amps);
         _rows.RemoveAt(index);
         RefreshOverview();
         RefreshAssessment("Ontwerpstroomrij verwijderd.");
@@ -349,14 +387,21 @@ internal sealed class CurrentLoadPanel : UserControl
         if (columnName == "Amps")
         {
             var text = Convert.ToString(_overview.Rows[e.RowIndex].Cells["Amps"].Value);
-            if (TryParsePositiveAmps(text, out var amps))
-                row.Amps = amps;
+            if (!TryParsePositiveAmps(text, out var amps))
+                return;
+
+            var oldAmps = row.Amps;
+            row.Amps = amps;
+            ReassignTrackedObjects(oldAmps, amps);
         }
         else if (columnName == "Count")
         {
             var text = Convert.ToString(_overview.Rows[e.RowIndex].Cells["Count"].Value);
-            if (TryParsePositiveCount(text, out var count))
-                row.Count = count;
+            if (!TryParsePositiveCount(text, out var count))
+                return;
+
+            row.Count = count;
+            TrimTrackedObjectsForAmps(row.Amps, count);
         }
         else
         {
@@ -365,6 +410,42 @@ internal sealed class CurrentLoadPanel : UserControl
 
         NormalizeRows();
         QueueOverviewRefresh("Ontwerpstroomtabel aangepast.");
+    }
+
+    private void ReassignTrackedObjects(double oldAmps, double newAmps)
+    {
+        var ids = _selectedTextObjects
+            .Where(x => SameAmps(x.Value, oldAmps))
+            .Select(x => x.Key)
+            .ToList();
+
+        foreach (var id in ids)
+            _selectedTextObjects[id] = newAmps;
+    }
+
+    private void TrimTrackedObjectsForAmps(double amps, int maximumTrackedCount)
+    {
+        var trackedIds = _selectedTextObjects
+            .Where(x => SameAmps(x.Value, amps))
+            .Select(x => x.Key)
+            .ToList();
+
+        if (trackedIds.Count <= maximumTrackedCount)
+            return;
+
+        foreach (var id in trackedIds.Skip(maximumTrackedCount))
+            _selectedTextObjects.Remove(id);
+    }
+
+    private void RemoveTrackedObjectsForAmps(double amps)
+    {
+        var ids = _selectedTextObjects
+            .Where(x => SameAmps(x.Value, amps))
+            .Select(x => x.Key)
+            .ToList();
+
+        foreach (var id in ids)
+            _selectedTextObjects.Remove(id);
     }
 
     private void QueueOverviewRefresh(string assessmentMessage)
@@ -428,16 +509,38 @@ internal sealed class CurrentLoadPanel : UserControl
 
     private void RefreshAssessment(string? selectionMessage = null)
     {
-        if (_calculation?.MaxDesignCurrentAmps is not int maxAllowed)
-            return;
-
         var count = _rows.Sum(x => x.Count);
         var total = _rows.Sum(x => x.Amps * x.Count);
+
+        if (_calculation is null)
+        {
+            SetNeutral(
+                count == 0 ? "Ontwerpstroom: —" : $"Ontwerpstroom totaal: {FormatAmps(total)} A",
+                BuildMessage(
+                    selectionMessage,
+                    "Nog geen actuele kabelrichting berekend. Je kunt ontwerpstroom eerst opbouwen en later de kabelrichting berekenen."));
+            return;
+        }
+
+        if (_calculation.MaxDesignCurrentAmps is not int maxAllowed)
+        {
+            _icon.Text = "✕";
+            _icon.ForeColor = Color.Firebrick;
+            _summary.ForeColor = Color.Firebrick;
+            _summary.Text = count == 0
+                ? "Richting heeft geen toegestane ontwerpstroom"
+                : $"{FormatAmps(total)} A — richting heeft geen toegestane ontwerpstroom";
+            _details.Text = BuildMessage(
+                selectionMessage,
+                "Voor deze kabelrichting is geen geldige maximale ontwerpstroom beschikbaar.");
+            return;
+        }
+
         if (count == 0)
         {
             SetNeutral(
                 $"Maximaal toegestaan: {maxAllowed} A",
-                selectionMessage ?? "Nog geen ontwerpstroom toegevoegd.");
+                BuildMessage(selectionMessage, "Nog geen ontwerpstroom toegevoegd."));
             return;
         }
 
@@ -454,27 +557,14 @@ internal sealed class CurrentLoadPanel : UserControl
             ? $"Marge {FormatAmps(difference)} A."
             : $"Overschrijding {FormatAmps(difference)} A.";
 
-        _details.Text =
-            $"{count} ontwerpstroomwaarde{(count == 1 ? string.Empty : "n")} in totaal. {marginText}" +
-            (string.IsNullOrWhiteSpace(selectionMessage)
-                ? string.Empty
-                : Environment.NewLine + selectionMessage);
-    }
-
-    private void SetSelectionButtonsEnabled(bool enabled)
-    {
-        _brushButton.Enabled = enabled;
-        _manualButton.Enabled = enabled;
-        _radiusMeters.Enabled = enabled;
-        UpdateRemoveButtonState();
+        _details.Text = BuildMessage(
+            selectionMessage,
+            $"{count} ontwerpstroomwaarde{(count == 1 ? string.Empty : "n")} in totaal. {marginText}");
     }
 
     private void UpdateRemoveButtonState()
     {
-        _removeRowButton.Enabled =
-            _calculation?.MaxDesignCurrentAmps is int &&
-            _rows.Count > 0 &&
-            _overview.CurrentRow is not null;
+        _removeRowButton.Enabled = _rows.Count > 0 && _overview.CurrentRow is not null;
     }
 
     private void SetNeutral(string summary, string details)
@@ -484,6 +574,15 @@ internal sealed class CurrentLoadPanel : UserControl
         _summary.ForeColor = SystemColors.ControlText;
         _summary.Text = summary;
         _details.Text = details;
+    }
+
+    private static string BuildMessage(string? first, string second)
+    {
+        if (string.IsNullOrWhiteSpace(first))
+            return second;
+        if (string.IsNullOrWhiteSpace(second))
+            return first;
+        return first + Environment.NewLine + second;
     }
 
     private static bool TryParsePositiveAmps(string? text, out double value)
@@ -508,6 +607,7 @@ internal sealed class CurrentLoadPanel : UserControl
                value > 0;
     }
 
+    private static bool SameAmps(double left, double right) => Math.Abs(left - right) <= 1e-9;
     private static string FormatAmps(double value) => value.ToString("0.##", DutchCulture);
 
     private sealed class CurrentLoadRow
