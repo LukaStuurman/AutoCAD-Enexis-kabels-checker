@@ -7,8 +7,8 @@ internal sealed class CurrentLoadPanel : UserControl
 {
     private static readonly CultureInfo DutchCulture = CultureInfo.GetCultureInfo("nl-NL");
 
-    private readonly Button _windowButton = new();
-    private readonly Button _manualButton = new();
+    private readonly Button _brushButton = new();
+    private readonly NumericUpDown _radiusMeters = new();
     private readonly Label _summary = new();
     private readonly Label _details = new();
     private readonly Label _icon = new();
@@ -30,16 +30,16 @@ internal sealed class CurrentLoadPanel : UserControl
 
         if (calculation is null)
         {
-            SetButtonsEnabled(false);
+            _brushButton.Enabled = false;
             SetNeutral(
                 "Bereken eerst de kabelrichting.",
-                "Daarna kun je meerdere stroomteksten tegelijk selecteren.");
+                "Daarna kun je stroomteksten met de ronde selectieborstel aanklikken.");
             return;
         }
 
         if (calculation.MaxDesignCurrentAmps is null)
         {
-            SetButtonsEnabled(false);
+            _brushButton.Enabled = false;
             _icon.Text = "✕";
             _icon.ForeColor = Color.Firebrick;
             _summary.Text = "Richting heeft geen toegestane ontwerpstroom";
@@ -48,10 +48,10 @@ internal sealed class CurrentLoadPanel : UserControl
             return;
         }
 
-        SetButtonsEnabled(true);
+        _brushButton.Enabled = true;
         SetNeutral(
             $"Maximaal toegestaan: {calculation.MaxDesignCurrentAmps.Value} A",
-            "Venster = snel meerdere TEXT/MTEXT; Handmatig = losse teksten aanklikken.");
+            "Klik met de cirkel nabij elke stroomtekst; Enter rondt de selectie af.");
     }
 
     private void BuildUi()
@@ -64,8 +64,8 @@ internal sealed class CurrentLoadPanel : UserControl
             RowCount = 1,
             Padding = new Padding(7)
         };
-        root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 44));
-        root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 47));
+        root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 46));
+        root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 45));
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 9));
 
         var actionPanel = new FlowLayoutPanel
@@ -84,7 +84,7 @@ internal sealed class CurrentLoadPanel : UserControl
             Margin = new Padding(0, 0, 0, 4)
         });
 
-        var buttons = new FlowLayoutPanel
+        var brushControls = new FlowLayoutPanel
         {
             AutoSize = true,
             FlowDirection = FlowDirection.LeftToRight,
@@ -92,21 +92,38 @@ internal sealed class CurrentLoadPanel : UserControl
             Margin = new Padding(0)
         };
 
-        _windowButton.Text = "Venster selecteren";
-        _windowButton.AutoSize = true;
-        _windowButton.Padding = new Padding(4, 1, 4, 1);
-        _windowButton.Margin = new Padding(0, 0, 5, 0);
-        _windowButton.Click += (_, _) => SelectAndCheck(TextCurrentSelectionMode.CrossingWindow);
-        buttons.Controls.Add(_windowButton);
+        _brushButton.Text = "Cirkel selecteren";
+        _brushButton.AutoSize = true;
+        _brushButton.Padding = new Padding(4, 1, 4, 1);
+        _brushButton.Margin = new Padding(0, 0, 7, 0);
+        _brushButton.Click += (_, _) => SelectAndCheck();
+        brushControls.Controls.Add(_brushButton);
 
-        _manualButton.Text = "Handmatig";
-        _manualButton.AutoSize = true;
-        _manualButton.Padding = new Padding(4, 1, 4, 1);
-        _manualButton.Margin = new Padding(0);
-        _manualButton.Click += (_, _) => SelectAndCheck(TextCurrentSelectionMode.Manual);
-        buttons.Controls.Add(_manualButton);
+        brushControls.Controls.Add(new Label
+        {
+            Text = "Straal [m]:",
+            AutoSize = true,
+            Padding = new Padding(0, 5, 3, 0),
+            Margin = new Padding(0)
+        });
 
-        actionPanel.Controls.Add(buttons);
+        _radiusMeters.DecimalPlaces = 1;
+        _radiusMeters.Minimum = 0.1M;
+        _radiusMeters.Maximum = 100.0M;
+        _radiusMeters.Increment = 0.5M;
+        _radiusMeters.Value = 2.0M;
+        _radiusMeters.Width = 67;
+        _radiusMeters.Margin = new Padding(0, 1, 0, 0);
+        brushControls.Controls.Add(_radiusMeters);
+
+        actionPanel.Controls.Add(brushControls);
+        actionPanel.Controls.Add(new Label
+        {
+            Text = "Per klik wordt de dichtstbijzijnde geldige TEXT/MTEXT binnen de cirkel toegevoegd.",
+            AutoSize = true,
+            MaximumSize = new Size(390, 0),
+            Margin = new Padding(0, 4, 0, 0)
+        });
         root.Controls.Add(actionPanel, 0, 0);
 
         var resultPanel = new TableLayoutPanel
@@ -140,7 +157,7 @@ internal sealed class CurrentLoadPanel : UserControl
         Controls.Add(root);
     }
 
-    private void SelectAndCheck(TextCurrentSelectionMode mode)
+    private void SelectAndCheck()
     {
         if (_calculation?.MaxDesignCurrentAmps is not int maxAllowed)
         {
@@ -153,7 +170,7 @@ internal sealed class CurrentLoadPanel : UserControl
             return;
         }
 
-        var selection = AutoCadSelectionReader.ReadSelectedTextCurrents(mode);
+        var selection = AutoCadSelectionReader.ReadSelectedTextCurrentsByBrush((double)_radiusMeters.Value);
         if (selection.Cancelled)
         {
             _details.Text = selection.Message;
@@ -193,12 +210,6 @@ internal sealed class CurrentLoadPanel : UserControl
         _details.Text =
             $"{selection.Values.Count} waarde(n): {string.Join(" + ", shownValues)} = {FormatAmps(total)} A. " +
             marginText + Environment.NewLine + selection.Message;
-    }
-
-    private void SetButtonsEnabled(bool enabled)
-    {
-        _windowButton.Enabled = enabled;
-        _manualButton.Enabled = enabled;
     }
 
     private void SetNeutral(string summary, string details)
