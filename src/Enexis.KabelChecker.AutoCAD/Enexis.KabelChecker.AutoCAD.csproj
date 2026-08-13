@@ -16,7 +16,7 @@
   </ItemGroup>
 
   <ItemGroup Condition="'$(UseAutoCADNuGet)' == 'true'">
-    <PackageReference Include="AutoCAD.NET.Core" Version="25.0.0" ExcludeAssets="runtime" PrivateAssets="all" />
+    <PackageReference Include="AutoCAD.NET" Version="25.0.1" ExcludeAssets="runtime" PrivateAssets="all" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(UseAutoCADNuGet)' != 'true'">
