@@ -170,7 +170,7 @@ internal sealed class CurrentLoadPanel : UserControl
             return;
         }
 
-        var selection = AutoCadSelectionReader.ReadSelectedTextCurrentsByBrush((double)_radiusMeters.Value);
+        var selection = TextCurrentBrushSelection.Read((double)_radiusMeters.Value);
         if (selection.Cancelled)
         {
             _details.Text = selection.Message;
