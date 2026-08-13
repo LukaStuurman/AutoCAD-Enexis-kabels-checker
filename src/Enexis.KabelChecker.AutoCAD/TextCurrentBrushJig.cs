@@ -1,6 +1,7 @@
 using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Geometry;
 using Autodesk.AutoCAD.GraphicsInterface;
+using System.Windows.Forms;
 
 namespace Enexis.KabelChecker.AutoCAD;
 
@@ -20,11 +21,12 @@ internal sealed class TextCurrentBrushJig : DrawJig
 
     public Point3d Center => _center;
     public bool FinishedByEnter { get; private set; }
+    public bool ShiftPressed { get; private set; }
 
     protected override SamplerStatus Sampler(JigPrompts prompts)
     {
         var options = new JigPromptPointOptions(
-            "\nKlik om alle geldige stroomteksten binnen de cirkel toe te voegen; Enter rondt af: ")
+            "\nKlik = toevoegen, Shift+klik = deselecteren binnen de cirkel; Enter rondt af: ")
         {
             UserInputControls = UserInputControls.Accept3dCoordinates | UserInputControls.NullResponseAccepted
         };
@@ -38,6 +40,8 @@ internal sealed class TextCurrentBrushJig : DrawJig
 
         if (result.Status != PromptStatus.OK)
             return SamplerStatus.Cancel;
+
+        ShiftPressed = (Control.ModifierKeys & Keys.Shift) == Keys.Shift;
 
         if (_hasCenter && result.Value.DistanceTo(_center) <= 1e-10)
             return SamplerStatus.NoChange;
