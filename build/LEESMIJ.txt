@@ -33,6 +33,7 @@ ONTWERPSTROOM CONTROLEREN UIT TEXT/MTEXT
 10. Onder de tabel staat het gezamenlijke totaal.
 11. Waarden zoals 25, 25,5, 25.5 en 25,5 A worden ondersteund.
 12. Een groot groen vinkje betekent dat de totale ontwerpstroom binnen de toegestane ontwerpstroom van de kabelrichting blijft; een rood kruis betekent overschrijding.
+13. Vanaf v1.5.2 wordt de tabel na een handmatige celwijziging pas na het afronden van de WinForms-editcyclus vernieuwd. Dit voorkomt de DataGridView reentrant SetCurrentCellAddressCore-crash bij het verlaten van een bewerkte cel.
 
 VERWIJDEREN
 Dubbelklik VERWIJDEREN.bat en start AutoCAD/Civil 3D daarna opnieuw.
@@ -41,7 +42,7 @@ INSTALLATIEMAP
 C:\Program Files\Autodesk\ApplicationPlugins\EnexisKabelChecker.bundle
 
 VERSIE
-1.5.1
+1.5.2
 
 OPMERKING
 Deze release is bedoeld voor AutoCAD 2025/2026 op Windows 64-bit. De bundle gebruikt Platform="AutoCAD*" en is daarmee ook bedoeld voor AutoCAD-gebaseerde producten zoals Civil 3D 2025/2026.
