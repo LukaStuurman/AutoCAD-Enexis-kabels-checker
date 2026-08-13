@@ -7,7 +7,8 @@ internal sealed class CurrentLoadPanel : UserControl
 {
     private static readonly CultureInfo DutchCulture = CultureInfo.GetCultureInfo("nl-NL");
 
-    private readonly Button _selectButton = new();
+    private readonly Button _windowButton = new();
+    private readonly Button _manualButton = new();
     private readonly Label _summary = new();
     private readonly Label _details = new();
     private readonly Label _icon = new();
@@ -17,7 +18,7 @@ internal sealed class CurrentLoadPanel : UserControl
     {
         AutoSize = true;
         Dock = DockStyle.Fill;
-        Margin = new Padding(0, 4, 0, 8);
+        Margin = new Padding(0, 2, 0, 4);
         BorderStyle = BorderStyle.FixedSingle;
         BuildUi();
         SetCalculation(null);
@@ -29,16 +30,16 @@ internal sealed class CurrentLoadPanel : UserControl
 
         if (calculation is null)
         {
-            _selectButton.Enabled = false;
+            SetButtonsEnabled(false);
             SetNeutral(
                 "Bereken eerst de kabelrichting.",
-                "Daarna kun je meerdere TEXT/MTEXT-objecten met stroomwaarden selecteren.");
+                "Daarna kun je meerdere stroomteksten tegelijk selecteren.");
             return;
         }
 
         if (calculation.MaxDesignCurrentAmps is null)
         {
-            _selectButton.Enabled = false;
+            SetButtonsEnabled(false);
             _icon.Text = "✕";
             _icon.ForeColor = Color.Firebrick;
             _summary.Text = "Richting heeft geen toegestane ontwerpstroom";
@@ -47,10 +48,10 @@ internal sealed class CurrentLoadPanel : UserControl
             return;
         }
 
-        _selectButton.Enabled = true;
+        SetButtonsEnabled(true);
         SetNeutral(
-            $"Maximaal toegestaan: {calculation.MaxDesignCurrentAmps.Value} A ontwerpstroom",
-            "Klik op de knop en selecteer alle TEXT/MTEXT-objecten met de stroomwaarden van deze richting.");
+            $"Maximaal toegestaan: {calculation.MaxDesignCurrentAmps.Value} A",
+            "Venster = snel meerdere TEXT/MTEXT; Handmatig = losse teksten aanklikken.");
     }
 
     private void BuildUi()
@@ -61,11 +62,11 @@ internal sealed class CurrentLoadPanel : UserControl
             AutoSize = true,
             ColumnCount = 3,
             RowCount = 1,
-            Padding = new Padding(10)
+            Padding = new Padding(7)
         };
-        root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 38));
-        root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 52));
-        root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 10));
+        root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 44));
+        root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 47));
+        root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 9));
 
         var actionPanel = new FlowLayoutPanel
         {
@@ -77,23 +78,35 @@ internal sealed class CurrentLoadPanel : UserControl
         };
         actionPanel.Controls.Add(new Label
         {
-            Text = "Controle belasting uit tekst",
+            Text = "Belasting uit tekst",
             AutoSize = true,
-            Font = new Font(SystemFonts.MessageBoxFont.FontFamily, 11F, FontStyle.Bold),
-            Margin = new Padding(0, 0, 0, 6)
-        });
-        actionPanel.Controls.Add(new Label
-        {
-            Text = "Ondersteunt o.a. 25, 25,5, 25.5 en 25,5 A.",
-            AutoSize = true,
-            Margin = new Padding(0, 0, 0, 8)
+            Font = new Font(SystemFonts.MessageBoxFont.FontFamily, 9.5F, FontStyle.Bold),
+            Margin = new Padding(0, 0, 0, 4)
         });
 
-        _selectButton.Text = "Tekststromen selecteren + toetsen";
-        _selectButton.AutoSize = true;
-        _selectButton.Padding = new Padding(8, 3, 8, 3);
-        _selectButton.Click += (_, _) => SelectAndCheck();
-        actionPanel.Controls.Add(_selectButton);
+        var buttons = new FlowLayoutPanel
+        {
+            AutoSize = true,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = true,
+            Margin = new Padding(0)
+        };
+
+        _windowButton.Text = "Venster selecteren";
+        _windowButton.AutoSize = true;
+        _windowButton.Padding = new Padding(4, 1, 4, 1);
+        _windowButton.Margin = new Padding(0, 0, 5, 0);
+        _windowButton.Click += (_, _) => SelectAndCheck(TextCurrentSelectionMode.CrossingWindow);
+        buttons.Controls.Add(_windowButton);
+
+        _manualButton.Text = "Handmatig";
+        _manualButton.AutoSize = true;
+        _manualButton.Padding = new Padding(4, 1, 4, 1);
+        _manualButton.Margin = new Padding(0);
+        _manualButton.Click += (_, _) => SelectAndCheck(TextCurrentSelectionMode.Manual);
+        buttons.Controls.Add(_manualButton);
+
+        actionPanel.Controls.Add(buttons);
         root.Controls.Add(actionPanel, 0, 0);
 
         var resultPanel = new TableLayoutPanel
@@ -102,32 +115,32 @@ internal sealed class CurrentLoadPanel : UserControl
             AutoSize = true,
             ColumnCount = 1,
             RowCount = 2,
-            Margin = new Padding(8, 0, 8, 0)
+            Margin = new Padding(6, 0, 6, 0)
         };
 
         _summary.AutoSize = true;
-        _summary.Font = new Font(SystemFonts.MessageBoxFont.FontFamily, 12F, FontStyle.Bold);
-        _summary.MaximumSize = new Size(500, 0);
-        _summary.Margin = new Padding(0, 5, 0, 4);
+        _summary.Font = new Font(SystemFonts.MessageBoxFont.FontFamily, 10.5F, FontStyle.Bold);
+        _summary.MaximumSize = new Size(410, 0);
+        _summary.Margin = new Padding(0, 2, 0, 2);
         resultPanel.Controls.Add(_summary, 0, 0);
 
         _details.AutoSize = true;
-        _details.MaximumSize = new Size(500, 0);
+        _details.MaximumSize = new Size(410, 0);
         _details.Margin = new Padding(0);
         resultPanel.Controls.Add(_details, 0, 1);
         root.Controls.Add(resultPanel, 1, 0);
 
         _icon.AutoSize = true;
         _icon.TextAlign = ContentAlignment.MiddleCenter;
-        _icon.Font = new Font("Segoe UI Symbol", 42F, FontStyle.Bold);
-        _icon.Margin = new Padding(4, 0, 4, 0);
+        _icon.Font = new Font("Segoe UI Symbol", 32F, FontStyle.Bold);
+        _icon.Margin = new Padding(2, 0, 2, 0);
         _icon.Anchor = AnchorStyles.None;
         root.Controls.Add(_icon, 2, 0);
 
         Controls.Add(root);
     }
 
-    private void SelectAndCheck()
+    private void SelectAndCheck(TextCurrentSelectionMode mode)
     {
         if (_calculation?.MaxDesignCurrentAmps is not int maxAllowed)
         {
@@ -140,7 +153,7 @@ internal sealed class CurrentLoadPanel : UserControl
             return;
         }
 
-        var selection = AutoCadSelectionReader.ReadSelectedTextCurrents();
+        var selection = AutoCadSelectionReader.ReadSelectedTextCurrents(mode);
         if (selection.Cancelled)
         {
             _details.Text = selection.Message;
@@ -167,19 +180,25 @@ internal sealed class CurrentLoadPanel : UserControl
             : $"PAST NIET — {FormatAmps(total)} A > {maxAllowed} A";
 
         var shownValues = selection.Values
-            .Take(12)
+            .Take(10)
             .Select(x => FormatAmps(x.Amps))
             .ToList();
-        if (selection.Values.Count > 12)
+        if (selection.Values.Count > 10)
             shownValues.Add("…");
 
         var marginText = fits
-            ? $"Marge over: {FormatAmps(difference)} A."
-            : $"Overschrijding: {FormatAmps(difference)} A.";
+            ? $"Marge {FormatAmps(difference)} A."
+            : $"Overschrijding {FormatAmps(difference)} A.";
 
         _details.Text =
             $"{selection.Values.Count} waarde(n): {string.Join(" + ", shownValues)} = {FormatAmps(total)} A. " +
             marginText + Environment.NewLine + selection.Message;
+    }
+
+    private void SetButtonsEnabled(bool enabled)
+    {
+        _windowButton.Enabled = enabled;
+        _manualButton.Enabled = enabled;
     }
 
     private void SetNeutral(string summary, string details)
