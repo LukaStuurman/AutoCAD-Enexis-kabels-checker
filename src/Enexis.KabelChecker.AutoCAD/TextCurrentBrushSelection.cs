@@ -62,52 +62,62 @@ internal static class TextCurrentBrushSelection
             $"\nRonde stroomselectie actief. Straal: {radiusMeters.ToString("0.0", DutchCulture)} m. " +
             "Klik nabij een stroomtekst; druk Enter om af te ronden.");
 
-        while (true)
+        try
         {
-            var jig = new TextCurrentBrushJig(radiusDrawingUnits);
-            var dragResult = editor.Drag(jig);
-
-            if (jig.FinishedByEnter)
-                break;
-
-            if (dragResult.Status != PromptStatus.OK)
+            while (true)
             {
-                return new TextCurrentSelectionResult(
-                    true,
-                    Array.Empty<TextCurrentValue>(),
-                    0,
-                    "Cirkelselectie geannuleerd.");
+                var jig = new TextCurrentBrushJig(radiusDrawingUnits);
+                var dragResult = editor.Drag(jig);
+
+                if (jig.FinishedByEnter)
+                    break;
+
+                if (dragResult.Status != PromptStatus.OK)
+                {
+                    return new TextCurrentSelectionResult(
+                        true,
+                        Array.Empty<TextCurrentValue>(),
+                        0,
+                        "Cirkelselectie geannuleerd.");
+                }
+
+                var candidate = FindNearestCandidate(jig.Center, radiusDrawingUnits, candidates, selectedIds);
+                if (candidate is null)
+                {
+                    editor.WriteMessage("\nGeen nieuwe geldige stroomtekst binnen de cirkel. Klik opnieuw of druk Enter.");
+                    continue;
+                }
+
+                selectedIds.Add(candidate.Id);
+                values.Add(new TextCurrentValue(candidate.SourceText, candidate.Amps));
+                SetEntityHighlight(database, candidate.Id, highlight: true);
+
+                editor.WriteMessage(
+                    $"\nToegevoegd: {candidate.Amps.ToString("0.##", DutchCulture)} A " +
+                    $"({values.Count} geselecteerd). De tekst blijft gemarkeerd tot je met Enter afrondt.");
             }
 
-            var candidate = FindNearestCandidate(jig.Center, radiusDrawingUnits, candidates, selectedIds);
-            if (candidate is null)
-            {
-                editor.WriteMessage("\nGeen nieuwe geldige stroomtekst binnen de cirkel. Klik opnieuw of druk Enter.");
-                continue;
-            }
+            var messages = new List<string>();
+            if (values.Count == 0)
+                messages.Add("Geen stroomteksten toegevoegd met de cirkelselectie.");
+            else
+                messages.Add($"{values.Count} stroomwaarde(n) met de cirkelselectie toegevoegd.");
 
-            selectedIds.Add(candidate.Id);
-            values.Add(new TextCurrentValue(candidate.SourceText, candidate.Amps));
-            editor.WriteMessage(
-                $"\nToegevoegd: {candidate.Amps.ToString("0.##", DutchCulture)} A " +
-                $"({values.Count} geselecteerd). Klik de volgende tekst of druk Enter.");
+            messages.Add($"Selectiestraal: {radiusMeters.ToString("0.0", DutchCulture)} m.");
+            if (!string.IsNullOrWhiteSpace(unitWarning))
+                messages.Add(unitWarning);
+
+            return new TextCurrentSelectionResult(
+                false,
+                values,
+                0,
+                string.Join(Environment.NewLine, messages));
         }
-
-        var messages = new List<string>();
-        if (values.Count == 0)
-            messages.Add("Geen stroomteksten toegevoegd met de cirkelselectie.");
-        else
-            messages.Add($"{values.Count} stroomwaarde(n) met de cirkelselectie toegevoegd.");
-
-        messages.Add($"Selectiestraal: {radiusMeters.ToString("0.0", DutchCulture)} m.");
-        if (!string.IsNullOrWhiteSpace(unitWarning))
-            messages.Add(unitWarning);
-
-        return new TextCurrentSelectionResult(
-            false,
-            values,
-            0,
-            string.Join(Environment.NewLine, messages));
+        finally
+        {
+            foreach (var id in selectedIds)
+                SetEntityHighlight(database, id, highlight: false);
+        }
     }
 
     private static IReadOnlyList<TextCandidate> LoadValidTextCandidates(Database database)
@@ -188,6 +198,27 @@ internal static class TextCurrentBrushSelection
         }
 
         return best;
+    }
+
+    private static void SetEntityHighlight(Database database, ObjectId id, bool highlight)
+    {
+        try
+        {
+            using var transaction = database.TransactionManager.StartOpenCloseTransaction();
+            if (transaction.GetObject(id, OpenMode.ForRead) is Entity entity)
+            {
+                if (highlight)
+                    entity.Highlight();
+                else
+                    entity.Unhighlight();
+            }
+
+            transaction.Commit();
+        }
+        catch (Autodesk.AutoCAD.Runtime.Exception)
+        {
+            // Highlighting is alleen visuele feedback; een fout hierin mag de stroomselectie niet blokkeren.
+        }
     }
 
     private static double DistanceToExtents2d(Point3d point, Point3d min, Point3d max)
