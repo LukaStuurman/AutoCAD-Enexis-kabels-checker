@@ -4,12 +4,12 @@
   AutodeskProduct="AutoCAD"
   ProductType="Application"
   Name="Enexis Kabel Checker"
-  AppVersion="1.6.1"
-  Description="Controleert LS-kabelrichtingen en ontwerpstroom onafhankelijk van elkaar, met stabiel in-place bewerkbare ontwerpstroomcellen, hoogste gG-resultaat, totale kabellengte en cirkelselectie met Shift-deselectie."
-  Author="LukaStuurman"
+  AppVersion="1.7.0"
+  Description="Controleert LS-kabelrichtingen en ontwerpstroom met een 3 m cirkelborstel die klik/sleep ondersteunt, Shift-wissen, volledige Reset en stabiel bewerkbare ontwerpstroomcellen."
+  Author="Luka Stuurman"
   ProductCode="{A2860F05-1A53-4896-8D0D-2352653188A7}"
   UpgradeCode="{D7C51584-3C82-44BF-A614-3CF43BA51D41}">
-  <CompanyDetails Name="LukaStuurman" />
+  <CompanyDetails Name="Luka Stuurman" />
   <RuntimeRequirements OS="Win64" Platform="AutoCAD*" SeriesMin="R25.0" SeriesMax="R25.1" />
   <Components>
     <ComponentEntry
