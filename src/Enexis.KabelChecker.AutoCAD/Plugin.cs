@@ -3,7 +3,7 @@ using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Runtime;
 using Enexis.KabelChecker.Core;
-using AcApp = Autodesk.AutoCAD.ApplicationServices.Core.Application;
+using AcApp = Autodesk.AutoCAD.ApplicationServices.Application;
 
 [assembly: ExtensionApplication(typeof(Enexis.KabelChecker.AutoCAD.PluginEntry))]
 [assembly: CommandClass(typeof(Enexis.KabelChecker.AutoCAD.KabelCheckerCommands))]
@@ -65,7 +65,7 @@ internal static class AutoCadSelectionReader
         var editor = doc.Editor;
         var database = doc.Database;
 
-        using var interaction = editor.StartUserInteraction(modalForm);
+        using var interaction = editor.StartUserInteraction(modalForm.Handle);
 
         var options = new PromptEntityOptions(
             $"\nSelecteer de polyline voor {cableName}: ");
