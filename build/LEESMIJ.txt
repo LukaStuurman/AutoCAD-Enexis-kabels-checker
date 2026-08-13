@@ -17,23 +17,25 @@ GEBRUIK KABELRICHTING
 - Kabeltype en lengte zijn na toevoegen direct bewerkbaar in de tabel.
 - Onder de kabeltabel staat altijd de totale lengte van alle kabelsegmenten samen.
 - Gebruik 'Verwijder rij' om alleen het geselecteerde kabelsegment te verwijderen.
-- Klik 'Bereken richting'. Het resultaatblok toont alleen de hoogste toegestane gG-zekering; de uitgebreide Excel-/tussenresultaatweergave is verwijderd.
-- Gebruik 'Reset' voor de volgende richting.
+- Klik 'Bereken richting'. Het resultaatblok toont alleen de hoogste toegestane gG-zekering.
+- Een wijziging aan kabeltype, kabellengte of belastingsprofiel maakt alleen de kabelberekening ongeldig. De reeds opgebouwde ontwerpstroomtabel blijft staan.
+- Gebruik 'Reset' om de kabelrichting leeg te maken. Ook daarbij blijft de ontwerpstroom staan zodat je die opnieuw tegen een andere richting kunt controleren.
 
 ONTWERPSTROOM CONTROLEREN UIT TEXT/MTEXT
-1. Bereken eerst de kabelrichting.
+1. Ontwerpstroom en kabelrichting zijn onafhankelijk. Je mag dus eerst ontwerpstroom selecteren en pas daarna de kabelrichting opbouwen/berekenen, of andersom.
 2. Gebruik 'Cirkel' voor de ronde selectieborstel en stel de gewenste 'Cirkelstraal [m]' in.
-3. Eén klik met de cirkel voegt ALLE geldige TEXT/MTEXT-objecten binnen de cirkel toe. De gekozen teksten worden tijdens de selectie gemarkeerd.
-4. Blijf klikken om meer gebieden toe te voegen en druk Enter wanneer je klaar bent.
-5. Gebruik 'Handmatig' wanneer je liever de normale AutoCAD-meervoudige selectie gebruikt.
-6. Nieuwe Cirkel- en Handmatig-selecties worden bij de bestaande ontwerpstroomtabel opgeteld.
-7. De tabel toont Ontwerpstroom [A], Aantal en Subtotaal [A]. Ontwerpstroom en Aantal zijn direct bewerkbaar; Subtotaal wordt automatisch berekend.
-8. Gelijke ontwerpstroomwaarden worden samengevoegd tot één rij.
-9. Gebruik 'Verwijder rij' om alleen de geselecteerde ontwerpstroomrij te verwijderen.
-10. Onder de tabel staat het gezamenlijke totaal.
-11. Waarden zoals 25, 25,5, 25.5 en 25,5 A worden ondersteund.
-12. Een groot groen vinkje betekent dat de totale ontwerpstroom binnen de toegestane ontwerpstroom van de kabelrichting blijft; een rood kruis betekent overschrijding.
-13. Vanaf v1.5.2 wordt de tabel na een handmatige celwijziging pas na het afronden van de WinForms-editcyclus vernieuwd. Dit voorkomt de DataGridView reentrant SetCurrentCellAddressCore-crash bij het verlaten van een bewerkte cel.
+3. Normaal klikken met de cirkel voegt ALLE geldige TEXT/MTEXT-objecten binnen de cirkel toe.
+4. Houd SHIFT ingedrukt tijdens een klik om eerder geselecteerde TEXT/MTEXT-objecten binnen de cirkel te DESELECTEREN.
+5. Tijdens de cirkelselectie blijven de geselecteerde tekstobjecten met AutoCAD's selectie-highlight zichtbaar. Enter rondt de cirkelselectie af.
+6. Gebruik 'Handmatig' wanneer je liever de normale AutoCAD-meervoudige selectie gebruikt. Handmatig geselecteerde tekstobjecten worden eveneens op objectniveau bijgehouden en kunnen later met Shift+cirkel worden gedeselecteerd.
+7. Hetzelfde TEXT/MTEXT-object wordt niet dubbel geteld wanneer je het nogmaals selecteert.
+8. Nieuwe Cirkel- en Handmatig-selecties worden bij de bestaande ontwerpstroomtabel opgeteld.
+9. De tabel toont Ontwerpstroom [A], Aantal en Subtotaal [A]. Ontwerpstroom en Aantal zijn direct bewerkbaar; Subtotaal wordt automatisch berekend.
+10. Gelijke ontwerpstroomwaarden worden samengevoegd tot één rij.
+11. Gebruik 'Verwijder rij' om alleen de geselecteerde ontwerpstroomrij te verwijderen.
+12. Onder de tabel staat het gezamenlijke totaal. Zonder actuele kabelberekening blijft dit totaal gewoon zichtbaar; na 'Bereken richting' verschijnt direct de groen/rode vergelijking met de maximaal toegestane ontwerpstroom.
+13. Waarden zoals 25, 25,5, 25.5 en 25,5 A worden ondersteund.
+14. De uitgestelde tabelrefresh uit v1.5.2 blijft actief om de WinForms DataGridView reentrant SetCurrentCellAddressCore-crash te voorkomen.
 
 VERWIJDEREN
 Dubbelklik VERWIJDEREN.bat en start AutoCAD/Civil 3D daarna opnieuw.
@@ -42,7 +44,7 @@ INSTALLATIEMAP
 C:\Program Files\Autodesk\ApplicationPlugins\EnexisKabelChecker.bundle
 
 VERSIE
-1.5.2
+1.6.0
 
 OPMERKING
 Deze release is bedoeld voor AutoCAD 2025/2026 op Windows 64-bit. De bundle gebruikt Platform="AutoCAD*" en is daarmee ook bedoeld voor AutoCAD-gebaseerde producten zoals Civil 3D 2025/2026.
