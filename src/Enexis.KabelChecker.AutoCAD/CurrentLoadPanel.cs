@@ -21,7 +21,6 @@ internal sealed class CurrentLoadPanel : UserControl
     private readonly Dictionary<ObjectId, double> _selectedTextObjects = new();
     private CalculationResult? _calculation;
     private bool _refreshingOverview;
-    private bool _overviewRefreshQueued;
 
     public CurrentLoadPanel()
     {
@@ -194,7 +193,7 @@ internal sealed class CurrentLoadPanel : UserControl
         _overview.EditMode = DataGridViewEditMode.EditOnEnter;
         _overview.RowHeadersVisible = false;
         _overview.MultiSelect = false;
-        _overview.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
+        _overview.SelectionMode = DataGridViewSelectionMode.CellSelect;
         _overview.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
         _overview.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
         _overview.ColumnHeadersHeight = 23;
@@ -408,8 +407,30 @@ internal sealed class CurrentLoadPanel : UserControl
             return;
         }
 
-        NormalizeRows();
-        QueueOverviewRefresh("Ontwerpstroomtabel aangepast.");
+        UpdateGridRowInPlace(e.RowIndex);
+        UpdateOverviewTotals();
+        UpdateRemoveButtonState();
+        RefreshAssessment("Ontwerpstroomtabel aangepast.");
+    }
+
+    private void UpdateGridRowInPlace(int rowIndex)
+    {
+        if (rowIndex < 0 || rowIndex >= _rows.Count || rowIndex >= _overview.Rows.Count)
+            return;
+
+        var row = _rows[rowIndex];
+        _refreshingOverview = true;
+        try
+        {
+            var gridRow = _overview.Rows[rowIndex];
+            gridRow.Cells["Amps"].Value = FormatAmps(row.Amps);
+            gridRow.Cells["Count"].Value = row.Count.ToString(DutchCulture);
+            gridRow.Cells["Subtotal"].Value = FormatAmps(row.Amps * row.Count);
+        }
+        finally
+        {
+            _refreshingOverview = false;
+        }
     }
 
     private void ReassignTrackedObjects(double oldAmps, double newAmps)
@@ -448,23 +469,6 @@ internal sealed class CurrentLoadPanel : UserControl
             _selectedTextObjects.Remove(id);
     }
 
-    private void QueueOverviewRefresh(string assessmentMessage)
-    {
-        if (_overviewRefreshQueued || IsDisposed || Disposing)
-            return;
-
-        _overviewRefreshQueued = true;
-        BeginInvoke(new Action(() =>
-        {
-            _overviewRefreshQueued = false;
-            if (IsDisposed || Disposing)
-                return;
-
-            RefreshOverview();
-            RefreshAssessment(assessmentMessage);
-        }));
-    }
-
     private void NormalizeRows()
     {
         if (_rows.Count <= 1)
@@ -499,12 +503,17 @@ internal sealed class CurrentLoadPanel : UserControl
             _refreshingOverview = false;
         }
 
+        UpdateOverviewTotals();
+        UpdateRemoveButtonState();
+    }
+
+    private void UpdateOverviewTotals()
+    {
         var total = _rows.Sum(x => x.Amps * x.Count);
         var count = _rows.Sum(x => x.Count);
         _totalLabel.Text = count == 0
             ? "Totaal: 0 A"
             : $"Totaal: {FormatAmps(total)} A  ({count}× ontwerpstroom)";
-        UpdateRemoveButtonState();
     }
 
     private void RefreshAssessment(string? selectionMessage = null)
