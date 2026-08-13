@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Text;
 using Enexis.KabelChecker.Core;
 
 namespace Enexis.KabelChecker.AutoCAD;
@@ -12,12 +11,8 @@ internal sealed class KabelCheckerForm : Form
     private readonly ComboBox _profile = new();
     private readonly ComboBox _cablePicker = new();
     private readonly DataGridView _grid = new();
+    private readonly Label _totalLengthLabel = new();
     private readonly Label _fuseResult = new();
-    private readonly Label _designResult = new();
-    private readonly Label _impedanceResult = new();
-    private readonly Label _componentsResult = new();
-    private readonly Label _ampacityResult = new();
-    private readonly TextBox _details = new();
     private readonly Label _message = new();
     private readonly CurrentLoadPanel _currentLoadPanel = new();
     private readonly List<CableSegment> _segments = new();
@@ -30,8 +25,8 @@ internal sealed class KabelCheckerForm : Form
         Text = "Enexis kabel checker";
         StartPosition = FormStartPosition.CenterScreen;
         Width = 840;
-        Height = 720;
-        MinimumSize = new Size(760, 620);
+        Height = 690;
+        MinimumSize = new Size(760, 600);
         AutoScaleMode = AutoScaleMode.Dpi;
         Font = new Font("Segoe UI", 8.75F);
 
@@ -55,10 +50,10 @@ internal sealed class KabelCheckerForm : Form
         };
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        root.RowStyles.Add(new RowStyle(SizeType.Percent, 38));
+        root.RowStyles.Add(new RowStyle(SizeType.Percent, 48));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        root.RowStyles.Add(new RowStyle(SizeType.Percent, 62));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        root.RowStyles.Add(new RowStyle(SizeType.Percent, 52));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
         var header = new TableLayoutPanel
@@ -161,7 +156,23 @@ internal sealed class KabelCheckerForm : Form
         root.Controls.Add(addPanel, 0, 1);
 
         ConfigureGrid();
-        root.Controls.Add(_grid, 0, 2);
+        var cableTablePanel = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 2,
+            Margin = new Padding(0)
+        };
+        cableTablePanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        cableTablePanel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        cableTablePanel.Controls.Add(_grid, 0, 0);
+
+        _totalLengthLabel.AutoSize = true;
+        _totalLengthLabel.Font = new Font(Font.FontFamily, 9.5F, FontStyle.Bold);
+        _totalLengthLabel.Anchor = AnchorStyles.Right;
+        _totalLengthLabel.Margin = new Padding(0, 4, 2, 2);
+        cableTablePanel.Controls.Add(_totalLengthLabel, 0, 1);
+        root.Controls.Add(cableTablePanel, 0, 2);
 
         _message.AutoSize = true;
         _message.MaximumSize = new Size(800, 0);
@@ -169,46 +180,26 @@ internal sealed class KabelCheckerForm : Form
         _message.Margin = new Padding(0);
         root.Controls.Add(_message, 0, 3);
 
-        var resultPanel = new TableLayoutPanel
+        var fusePanel = new FlowLayoutPanel
         {
             Dock = DockStyle.Fill,
-            ColumnCount = 2,
-            RowCount = 1,
-            Margin = new Padding(0, 2, 0, 4)
+            AutoSize = true,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false,
+            Padding = new Padding(6),
+            Margin = new Padding(0, 2, 0, 4),
+            BorderStyle = BorderStyle.FixedSingle
         };
-        resultPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 39));
-        resultPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 61));
-
-        var summary = new TableLayoutPanel
+        fusePanel.Controls.Add(new Label
         {
-            Dock = DockStyle.Fill,
-            ColumnCount = 1,
-            RowCount = 6,
-            Padding = new Padding(6)
-        };
-
-        summary.Controls.Add(CreateSectionLabel("Maximaal toegestaan"));
+            Text = "Hoogste toegestane zekering:",
+            AutoSize = true,
+            Font = new Font(Font.FontFamily, 10F, FontStyle.Bold),
+            Padding = new Padding(0, 6, 8, 0)
+        });
         ConfigureLargeResult(_fuseResult, "— gG");
-        ConfigureLargeResult(_designResult, "— A ontwerpstroom");
-        summary.Controls.Add(_fuseResult);
-        summary.Controls.Add(_designResult);
-
-        _impedanceResult.AutoSize = true;
-        _componentsResult.AutoSize = true;
-        _ampacityResult.AutoSize = true;
-        summary.Controls.Add(_impedanceResult);
-        summary.Controls.Add(_componentsResult);
-        summary.Controls.Add(_ampacityResult);
-        resultPanel.Controls.Add(summary, 0, 0);
-
-        _details.Dock = DockStyle.Fill;
-        _details.Multiline = true;
-        _details.ReadOnly = true;
-        _details.ScrollBars = ScrollBars.Vertical;
-        _details.Font = new Font("Consolas", 8.25F);
-        _details.Text = "Bouw eerst de richting op en druk daarna op Bereken richting.";
-        resultPanel.Controls.Add(_details, 1, 0);
-        root.Controls.Add(resultPanel, 0, 4);
+        fusePanel.Controls.Add(_fuseResult);
+        root.Controls.Add(fusePanel, 0, 4);
 
         root.Controls.Add(_currentLoadPanel, 0, 5);
 
@@ -236,6 +227,8 @@ internal sealed class KabelCheckerForm : Form
         Controls.Add(root);
         AcceptButton = calculate;
         CancelButton = close;
+
+        UpdateTotalLengthLabel();
     }
 
     private void ConfigureGrid()
@@ -289,7 +282,6 @@ internal sealed class KabelCheckerForm : Form
             if (_grid.IsCurrentCellDirty && _grid.CurrentCell is DataGridViewComboBoxCell)
                 _grid.CommitEdit(DataGridViewDataErrorContexts.Commit);
         };
-
         _grid.CellValueChanged += Grid_CellValueChanged;
         _grid.CellValidating += Grid_CellValidating;
         _grid.CellEndEdit += Grid_CellEndEdit;
@@ -330,7 +322,6 @@ internal sealed class KabelCheckerForm : Form
             if (pair.Value > 0 && CableCatalog.TryGet(pair.Key, out _))
                 _segments.Add(new CableSegment(pair.Key, pair.Value));
         }
-
         RefreshSegmentGrid();
     }
 
@@ -356,10 +347,8 @@ internal sealed class KabelCheckerForm : Form
         _segments.Add(new CableSegment(selected.CableName, picked.LengthMeters));
         RefreshSegmentGrid();
         ResetResult();
-
-        _message.Text =
-            $"Toegevoegd: {selected.CableName} — {picked.LengthMeters:0.00} m." +
-            (string.IsNullOrWhiteSpace(picked.Message) ? string.Empty : " " + picked.Message);
+        _message.Text = $"Toegevoegd: {selected.CableName} — {picked.LengthMeters:0.00} m." +
+                        (string.IsNullOrWhiteSpace(picked.Message) ? string.Empty : " " + picked.Message);
     }
 
     private void RemoveSelectedSegment()
@@ -379,9 +368,8 @@ internal sealed class KabelCheckerForm : Form
 
     private void Grid_CellValueChanged(object? sender, DataGridViewCellEventArgs e)
     {
-        if (_refreshingGrid || e.RowIndex < 0 || e.RowIndex >= _segments.Count)
+        if (_refreshingGrid || e.RowIndex < 0 || e.RowIndex >= _segments.Count || e.ColumnIndex < 0)
             return;
-
         if (_grid.Columns[e.ColumnIndex].Name != "Cable")
             return;
 
@@ -400,7 +388,7 @@ internal sealed class KabelCheckerForm : Form
 
     private void Grid_CellValidating(object? sender, DataGridViewCellValidatingEventArgs e)
     {
-        if (_refreshingGrid || e.RowIndex < 0 || _grid.Columns[e.ColumnIndex].Name != "Length")
+        if (_refreshingGrid || e.RowIndex < 0 || e.ColumnIndex < 0 || _grid.Columns[e.ColumnIndex].Name != "Length")
             return;
 
         if (TryParsePositiveLength(Convert.ToString(e.FormattedValue), out _))
@@ -412,7 +400,7 @@ internal sealed class KabelCheckerForm : Form
 
     private void Grid_CellEndEdit(object? sender, DataGridViewCellEventArgs e)
     {
-        if (_refreshingGrid || e.RowIndex < 0 || e.RowIndex >= _segments.Count || _grid.Columns[e.ColumnIndex].Name != "Length")
+        if (_refreshingGrid || e.RowIndex < 0 || e.RowIndex >= _segments.Count || e.ColumnIndex < 0 || _grid.Columns[e.ColumnIndex].Name != "Length")
             return;
 
         var value = Convert.ToString(_grid.Rows[e.RowIndex].Cells["Length"].Value);
@@ -424,6 +412,7 @@ internal sealed class KabelCheckerForm : Form
             return;
 
         _segments[e.RowIndex] = new CableSegment(current.CableName, length);
+        UpdateTotalLengthLabel();
         ResetResult();
         _message.Text = $"Rij {e.RowIndex + 1}: lengte aangepast naar {length:0.00} m; bereken opnieuw.";
     }
@@ -444,6 +433,13 @@ internal sealed class KabelCheckerForm : Form
         {
             _refreshingGrid = false;
         }
+        UpdateTotalLengthLabel();
+    }
+
+    private void UpdateTotalLengthLabel()
+    {
+        var total = _segments.Sum(x => x.LengthMeters);
+        _totalLengthLabel.Text = $"Totale kabellengte: {total.ToString("0.00", DutchCulture)} m";
     }
 
     private void ResetDirection()
@@ -471,55 +467,19 @@ internal sealed class KabelCheckerForm : Form
 
     private void ShowResult(CalculationResult result)
     {
-        if (result.MaximumAllowed is null)
-        {
-            _fuseResult.Text = "Geen gG toegestaan";
-            _designResult.Text = "—";
-        }
-        else
-        {
-            _fuseResult.Text = $"{result.FuseAmps} A gG";
-            _designResult.Text = $"max. {result.MaxDesignCurrentAmps} A ontwerpstroom";
-        }
+        _fuseResult.Text = result.MaximumAllowed is null
+            ? "Geen gG toegestaan"
+            : $"{result.FuseAmps} A gG";
 
-        _impedanceResult.Text = $"Z: {result.TotalImpedanceOhm:0.000000} Ω";
-        _componentsResult.Text = $"R: {result.TotalResistanceOhm:0.000000} Ω | X: {result.TotalReactanceOhm:0.000000} Ω";
-        _ampacityResult.Text = $"Laagste kabel-I: {result.LimitingCableAmpacityA:0.0} A";
-
-        var sb = new StringBuilder();
-        sb.AppendLine("Richting (gelijke typen samengevoegd):");
-        foreach (var segment in result.Segments)
-            sb.AppendLine($"- {segment.CableName}: {segment.LengthMeters:0.00} m");
-
-        sb.AppendLine();
-        sb.AppendLine("gG   ontwerp   Z-limiet   Z   kabel-I   resultaat");
-        sb.AppendLine("--------------------------------------------------");
-        foreach (var assessment in result.Assessments)
-        {
-            sb.AppendLine(
-                $"{assessment.Option.FuseAmps,3}A  " +
-                $"{assessment.Option.MaxDesignCurrentAmps,3}A     " +
-                $"{assessment.Option.MaxImpedanceOhm,7:0.000}Ω  " +
-                $"{(assessment.ImpedanceOk ? "OK" : "NEE"),3}   " +
-                $"{(assessment.AmpacityOk ? "OK" : "NEE"),5}   " +
-                $"{(assessment.Allowed ? "JA" : "NEE")}");
-        }
-
-        sb.AppendLine();
-        sb.AppendLine("Beide Excel-controles moeten voldoen.");
-        sb.AppendLine("Kabelverjonging blijft een aparte ontwerpvoorwaarde.");
-        _details.Text = sb.ToString();
         _currentLoadPanel.SetCalculation(result);
+        _message.Text = result.MaximumAllowed is null
+            ? "Berekening afgerond: voor deze richting is geen gG-zekering toegestaan."
+            : $"Berekening afgerond. Hoogste toegestane zekering: {result.FuseAmps} A gG.";
     }
 
     private void ResetResult()
     {
         _fuseResult.Text = "— gG";
-        _designResult.Text = "— A ontwerpstroom";
-        _impedanceResult.Text = string.Empty;
-        _componentsResult.Text = string.Empty;
-        _ampacityResult.Text = string.Empty;
-        _details.Text = "Bouw de richting op en druk op Bereken richting.";
         _currentLoadPanel.SetCalculation(null);
     }
 
@@ -535,18 +495,11 @@ internal sealed class KabelCheckerForm : Form
         return parsed && value > 0 && !double.IsNaN(value) && !double.IsInfinity(value);
     }
 
-    private static Label CreateSectionLabel(string text) => new()
-    {
-        Text = text,
-        AutoSize = true,
-        Font = new Font(SystemFonts.MessageBoxFont.FontFamily, 9.5F, FontStyle.Bold)
-    };
-
     private static void ConfigureLargeResult(Label label, string initialText)
     {
         label.Text = initialText;
         label.AutoSize = true;
-        label.Font = new Font(SystemFonts.MessageBoxFont.FontFamily, 13.5F, FontStyle.Bold);
+        label.Font = new Font(SystemFonts.MessageBoxFont.FontFamily, 14F, FontStyle.Bold);
         label.Padding = new Padding(0, 2, 0, 1);
     }
 
