@@ -1,6 +1,6 @@
 using System.Globalization;
-using Autodesk.AutoCAD.DatabaseServices;
 using Enexis.KabelChecker.Core;
+using ObjectId = Autodesk.AutoCAD.DatabaseServices.ObjectId;
 
 namespace Enexis.KabelChecker.AutoCAD;
 
