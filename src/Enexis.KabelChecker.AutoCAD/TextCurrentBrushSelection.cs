@@ -4,6 +4,7 @@ using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Geometry;
+using Enexis.KabelChecker.Core;
 using AcApp = Autodesk.AutoCAD.ApplicationServices.Application;
 
 namespace Enexis.KabelChecker.AutoCAD;
