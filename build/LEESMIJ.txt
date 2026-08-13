@@ -22,13 +22,14 @@ GEBRUIK KABELRICHTING
 
 BELASTING CONTROLEREN UIT TEXT/MTEXT
 1. Bereken eerst de kabelrichting zodat de maximale ontwerpstroom bekend is.
-2. Gebruik 'Venster selecteren' om snel meerdere TEXT/MTEXT-objecten tegelijk mee te nemen: klik twee hoeken rond de teksten.
-3. Gebruik 'Handmatig' als je losse teksten één voor één wilt aanklikken.
-4. Alleen TEXT en MTEXT worden geselecteerd; andere objecten worden gefilterd.
-5. Waarden zoals 25, 25,5, 25.5 en 25,5 A worden ondersteund.
-6. De plugin telt de geldige waarden op en vergelijkt de som met de maximale ontwerpstroom.
-7. Een groot groen vinkje betekent dat de belasting past; een groot rood kruis betekent dat de maximale ontwerpstroom wordt overschreden.
-8. Tekst zonder precies één eenduidig getal wordt overgeslagen en gemeld.
+2. Stel bij 'Straal [m]' de grootte van de ronde selectieborstel in. Standaard is dit 2,0 m.
+3. Klik 'Cirkel selecteren'. Er verschijnt tijdens het bewegen een cirkel rond de cursor.
+4. Klik nabij een stroomtekst. De dichtstbijzijnde geldige TEXT/MTEXT binnen de cirkel wordt toegevoegd.
+5. Blijf klikken om meerdere stroomteksten achter elkaar toe te voegen en druk Enter wanneer je klaar bent.
+6. Dezelfde tekst kan binnen één selectie niet dubbel worden toegevoegd.
+7. Waarden zoals 25, 25,5, 25.5 en 25,5 A worden ondersteund.
+8. De plugin telt de gekozen waarden op en vergelijkt de som met de maximale ontwerpstroom.
+9. Een groot groen vinkje betekent dat de belasting past; een groot rood kruis betekent dat de maximale ontwerpstroom wordt overschreden.
 
 VERWIJDEREN
 Dubbelklik VERWIJDEREN.bat en start AutoCAD daarna opnieuw.
@@ -37,7 +38,7 @@ INSTALLATIEMAP
 C:\Program Files\Autodesk\ApplicationPlugins\EnexisKabelChecker.bundle
 
 VERSIE
-1.2.0
+1.3.0
 
 OPMERKING
 Deze release is bedoeld voor AutoCAD 2025 en AutoCAD 2026 op Windows 64-bit.
