@@ -4,8 +4,8 @@
   AutodeskProduct="AutoCAD"
   ProductType="Application"
   Name="Enexis Kabel Checker"
-  AppVersion="1.6.0"
-  Description="Controleert LS-kabelrichtingen en ontwerpstroom onafhankelijk van elkaar, met hoogste gG-resultaat, totale kabellengte, bewerkbare ontwerpstroomtabel en cirkelselectie met Shift-deselectie."
+  AppVersion="1.6.1"
+  Description="Controleert LS-kabelrichtingen en ontwerpstroom onafhankelijk van elkaar, met stabiel in-place bewerkbare ontwerpstroomcellen, hoogste gG-resultaat, totale kabellengte en cirkelselectie met Shift-deselectie."
   Author="LukaStuurman"
   ProductCode="{A2860F05-1A53-4896-8D0D-2352653188A7}"
   UpgradeCode="{D7C51584-3C82-44BF-A614-3CF43BA51D41}">
