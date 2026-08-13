@@ -40,6 +40,26 @@ internal sealed class CurrentLoadPanel : UserControl
         UpdateRemoveButtonState();
     }
 
+    public void ResetAll()
+    {
+        _refreshingOverview = true;
+        try
+        {
+            _overview.CancelEdit();
+        }
+        finally
+        {
+            _refreshingOverview = false;
+        }
+
+        _rows.Clear();
+        _selectedTextObjects.Clear();
+        _calculation = null;
+        _radiusMeters.Value = 3.0M;
+        RefreshOverview();
+        RefreshAssessment("Ontwerpstroom volledig gereset.");
+    }
+
     private void BuildUi()
     {
         var root = new TableLayoutPanel
@@ -120,7 +140,7 @@ internal sealed class CurrentLoadPanel : UserControl
         _radiusMeters.Minimum = 0.1M;
         _radiusMeters.Maximum = 100.0M;
         _radiusMeters.Increment = 0.5M;
-        _radiusMeters.Value = 2.0M;
+        _radiusMeters.Value = 3.0M;
         _radiusMeters.Width = 67;
         _radiusMeters.Margin = new Padding(0, 1, 0, 0);
         radiusControls.Controls.Add(_radiusMeters);
@@ -128,7 +148,7 @@ internal sealed class CurrentLoadPanel : UserControl
 
         actionPanel.Controls.Add(new Label
         {
-            Text = "Cirkel: klik = toevoegen, Shift+klik = eerder geselecteerde teksten binnen de cirkel deselecteren. Ontwerpstroom mag ook vóór de kabelberekening.",
+            Text = "Cirkel: klik of sleep met links = toevoegen; Shift+klik/sleep = eerder geselecteerde teksten deselecteren. Ontwerpstroom mag ook vóór de kabelberekening.",
             AutoSize = true,
             MaximumSize = new Size(300, 0),
             Margin = new Padding(0, 4, 0, 0)
