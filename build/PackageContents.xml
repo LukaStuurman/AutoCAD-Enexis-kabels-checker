@@ -4,7 +4,7 @@
   AutodeskProduct="AutoCAD"
   ProductType="Application"
   Name="Enexis Kabel Checker"
-  AppVersion="1.0.0"
+  AppVersion="1.0.1"
   Description="Controleert gG-afzekering en maximale ontwerpstroom op basis van Eea-0205.K."
   Author="LukaStuurman"
   ProductCode="{A2860F05-1A53-4896-8D0D-2352653188A7}"
@@ -14,10 +14,9 @@
   <Components>
     <ComponentEntry
       AppName="Enexis Kabel Checker"
-      AppType=".Net"
       ModuleName="./Contents/Windows/Enexis.KabelChecker.AutoCAD.dll"
       AppDescription="Enexis LS-kabelcontrole"
-      LoadReasons="LoadOnCommandInvocation">
+      LoadOnAutoCADStartup="True">
       <Commands GroupName="ENEXIS_KABEL_CHECKER">
         <Command Global="ENEXISKABELCHECK" Local="ENEXISKABELCHECK" />
         <Command Global="ENEXISKABELCHECKSEL" Local="ENEXISKABELCHECKSEL" />

@@ -20,6 +20,7 @@ public sealed class PluginEntry : IExtensionApplication
 
     public void Terminate()
     {
+        KabelCheckerWindowManager.Close();
     }
 }
 
@@ -28,8 +29,7 @@ public sealed class KabelCheckerCommands
     [CommandMethod("ENEXISKABELCHECK", CommandFlags.Modal)]
     public void OpenDirectionBuilder()
     {
-        using var form = new KabelCheckerForm();
-        AcApp.ShowModalDialog(form);
+        KabelCheckerWindowManager.Show();
     }
 
     [CommandMethod("ENEXISKABELCHECKSEL", CommandFlags.Modal | CommandFlags.UsePickSet)]
@@ -39,8 +39,57 @@ public sealed class KabelCheckerCommands
         if (result.Cancelled)
             return;
 
-        using var form = new KabelCheckerForm(result.LengthsByCable, result.Message);
-        AcApp.ShowModalDialog(form);
+        KabelCheckerWindowManager.Show(result.LengthsByCable, result.Message, replaceExisting: true);
+    }
+}
+
+internal static class KabelCheckerWindowManager
+{
+    private static KabelCheckerForm? _form;
+
+    public static void Show(
+        IReadOnlyDictionary<string, double>? presetLengths = null,
+        string? message = null,
+        bool replaceExisting = false)
+    {
+        if (_form is { IsDisposed: false })
+        {
+            if (!replaceExisting)
+            {
+                if (_form.WindowState == FormWindowState.Minimized)
+                    _form.WindowState = FormWindowState.Normal;
+
+                _form.Show();
+                _form.BringToFront();
+                _form.Activate();
+                return;
+            }
+
+            _form.Close();
+            _form = null;
+        }
+
+        var form = new KabelCheckerForm(presetLengths, message);
+        _form = form;
+        form.FormClosed += (_, _) =>
+        {
+            if (ReferenceEquals(_form, form))
+                _form = null;
+        };
+
+        AcApp.ShowModelessDialog(form);
+    }
+
+    public static void Close()
+    {
+        if (_form is not { IsDisposed: false })
+        {
+            _form = null;
+            return;
+        }
+
+        _form.Close();
+        _form = null;
     }
 }
 
@@ -56,7 +105,7 @@ internal sealed record PolylinePickResult(
 
 internal static class AutoCadSelectionReader
 {
-    public static PolylinePickResult PickSinglePolyline(Form modalForm, string cableName)
+    public static PolylinePickResult PickSinglePolyline(Form modelessForm, string cableName)
     {
         var doc = AcApp.DocumentManager.MdiActiveDocument;
         if (doc is null)
@@ -65,7 +114,11 @@ internal static class AutoCadSelectionReader
         var editor = doc.Editor;
         var database = doc.Database;
 
-        using var interaction = editor.StartUserInteraction(modalForm.Handle);
+        // Een modeless venster draait buiten de normale command-context. Autodesk
+        // adviseert daarom het actieve document te locken tijdens interactie vanuit
+        // een modeless UI. De lock bestaat alleen zolang de polyline wordt gekozen
+        // en de lengte wordt uitgelezen.
+        using var documentLock = doc.LockDocument();
 
         var options = new PromptEntityOptions(
             $"\nSelecteer de polyline voor {cableName}: ");
