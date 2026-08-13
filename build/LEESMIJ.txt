@@ -25,11 +25,13 @@ BELASTING CONTROLEREN UIT TEXT/MTEXT
 2. Stel bij 'Straal [m]' de grootte van de ronde selectieborstel in. Standaard is dit 2,0 m.
 3. Klik 'Cirkel selecteren'. Er verschijnt tijdens het bewegen een cirkel rond de cursor.
 4. Klik nabij een stroomtekst. De dichtstbijzijnde geldige TEXT/MTEXT binnen de cirkel wordt toegevoegd.
-5. Blijf klikken om meerdere stroomteksten achter elkaar toe te voegen en druk Enter wanneer je klaar bent.
-6. Dezelfde tekst kan binnen één selectie niet dubbel worden toegevoegd.
-7. Waarden zoals 25, 25,5, 25.5 en 25,5 A worden ondersteund.
-8. De plugin telt de gekozen waarden op en vergelijkt de som met de maximale ontwerpstroom.
-9. Een groot groen vinkje betekent dat de belasting past; een groot rood kruis betekent dat de maximale ontwerpstroom wordt overschreden.
+5. Een gekozen tekst blijft tijdens de selectie zichtbaar gemarkeerd met AutoCAD's eigen selectie-highlight.
+6. Blijf klikken om meerdere stroomteksten achter elkaar toe te voegen en druk Enter wanneer je klaar bent.
+7. Dezelfde tekst kan binnen één selectie niet dubbel worden toegevoegd.
+8. Na Enter of annuleren wordt de tijdelijke selectie-highlight weer verwijderd.
+9. Waarden zoals 25, 25,5, 25.5 en 25,5 A worden ondersteund.
+10. De plugin telt de gekozen waarden op en vergelijkt de som met de maximale ontwerpstroom.
+11. Een groot groen vinkje betekent dat de belasting past; een groot rood kruis betekent dat de maximale ontwerpstroom wordt overschreden.
 
 VERWIJDEREN
 Dubbelklik VERWIJDEREN.bat en start AutoCAD daarna opnieuw.
@@ -38,7 +40,8 @@ INSTALLATIEMAP
 C:\Program Files\Autodesk\ApplicationPlugins\EnexisKabelChecker.bundle
 
 VERSIE
-1.3.0
+1.3.1
 
 OPMERKING
 Deze release is bedoeld voor AutoCAD 2025 en AutoCAD 2026 op Windows 64-bit.
+De precieze selectie-highlight (bijvoorbeeld blauwe gloed) volgt de actieve AutoCAD-instellingen voor selectie-effecten.
