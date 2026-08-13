@@ -1,0 +1,30 @@
+ENEXIS KABEL CHECKER - AUTOCAD 2025/2026
+=========================================
+
+INSTALLEREN
+1. Sluit AutoCAD volledig.
+2. Pak deze ZIP helemaal uit naar een normale map.
+3. Dubbelklik INSTALLEREN.bat.
+4. Bevestig de Windows UAC-melding.
+5. Start AutoCAD 2025 of 2026.
+6. Typ ENEXISKABELCHECK in de AutoCAD-opdrachtregel.
+
+GEBRUIK
+- Kies een kabeltype, bijvoorbeeld 4*150mm2 Al.
+- Klik 'Polyline kiezen + toevoegen'.
+- Klik de polyline in de tekening aan; de lengte wordt automatisch uitgelezen.
+- Voeg eventueel meer kabeltypen/polylines van dezelfde richting toe.
+- Klik 'Bereken richting'.
+- Gebruik 'Reset richting' voor de volgende richting.
+
+VERWIJDEREN
+Dubbelklik VERWIJDEREN.bat en start AutoCAD daarna opnieuw.
+
+INSTALLATIEMAP
+C:\Program Files\Autodesk\ApplicationPlugins\EnexisKabelChecker.bundle
+
+VERSIE
+1.0.0
+
+OPMERKING
+Deze release is bedoeld voor AutoCAD 2025 en AutoCAD 2026 op Windows 64-bit.

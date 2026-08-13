@@ -8,13 +8,18 @@
     <AssemblyName>Enexis.KabelChecker.AutoCAD</AssemblyName>
     <RootNamespace>Enexis.KabelChecker.AutoCAD</RootNamespace>
     <AutoCADManagedDir Condition="'$(AutoCADManagedDir)' == ''">C:\Program Files\Autodesk\AutoCAD 2025</AutoCADManagedDir>
+    <UseAutoCADNuGet Condition="'$(UseAutoCADNuGet)' == ''">false</UseAutoCADNuGet>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Enexis.KabelChecker.Core\Enexis.KabelChecker.Core.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
+  <ItemGroup Condition="'$(UseAutoCADNuGet)' == 'true'">
+    <PackageReference Include="AutoCAD.NET.Core" Version="25.0.0" ExcludeAssets="runtime" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(UseAutoCADNuGet)' != 'true'">
     <Reference Include="AcCoreMgd">
       <HintPath>$(AutoCADManagedDir)\AcCoreMgd.dll</HintPath>
       <Private>false</Private>

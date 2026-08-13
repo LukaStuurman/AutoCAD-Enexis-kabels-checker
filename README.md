@@ -7,6 +7,19 @@ De rekenregels zijn overgenomen uit `Eea-0205.K 1.0.xlsx`, specifiek uit:
 - `Controle_kabel_evenredig` — evenredig verdeelde belasting over de kabel (50%)
 - `Controle_kabel_laatste_helft` — belasting geconcentreerd op de laatste helft van de kabel (75%)
 
+## Makkelijk installeren vanuit Releases
+
+De GitHub Release bevat één ZIP voor **AutoCAD 2025 en AutoCAD 2026 (Windows 64-bit)**.
+
+1. download `EnexisKabelChecker-AutoCAD-2025-2026-v1.0.0.zip` vanuit GitHub Releases;
+2. pak de ZIP volledig uit;
+3. sluit AutoCAD;
+4. dubbelklik `INSTALLEREN.bat` en bevestig de Windows UAC-melding;
+5. start AutoCAD opnieuw;
+6. typ `ENEXISKABELCHECK`.
+
+De installer kopieert `EnexisKabelChecker.bundle` naar `C:\Program Files\Autodesk\ApplicationPlugins`. Met `VERWIJDEREN.bat` kan dezelfde plugin weer worden verwijderd.
+
 ## Werkwijze in AutoCAD
 
 Start `ENEXISKABELCHECK` en bouw één richting stap voor stap op:
@@ -49,9 +62,11 @@ Koper: 4x185, 4x150, 4x95, 4x70, 4x50, 4x35, 4x25 en 4x16 mm².
 
 ## AutoCAD-versie
 
-De eerste build richt zich op AutoCAD 2025/2026 en .NET 8. De AutoCAD-projectfile verwijst standaard naar de managed DLL's van AutoCAD 2025; het pad kan tijdens de build worden overschreven met `AutoCADManagedDir`.
+De release is gericht op AutoCAD 2025/2026 en .NET 8. De CI-releasebuild compileert tegen Autodesk AutoCAD 2025 SDK 25.0; AutoCAD 2026 ondersteunt ook de AutoCAD 2025 Managed .NET SDK.
 
-## Bouwen
+## Bouwen voor ontwikkeling
+
+Met een lokale AutoCAD-installatie:
 
 ```powershell
 .\build.ps1

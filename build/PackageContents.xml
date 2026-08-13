@@ -14,9 +14,10 @@
   <Components>
     <ComponentEntry
       AppName="Enexis Kabel Checker"
+      AppType=".Net"
       ModuleName="./Contents/Windows/Enexis.KabelChecker.AutoCAD.dll"
       AppDescription="Enexis LS-kabelcontrole"
-      LoadOnAutoCADStartup="True">
+      LoadReasons="LoadOnCommandInvocation">
       <Commands GroupName="ENEXIS_KABEL_CHECKER">
         <Command Global="ENEXISKABELCHECK" Local="ENEXISKABELCHECK" />
         <Command Global="ENEXISKABELCHECKSEL" Local="ENEXISKABELCHECKSEL" />
