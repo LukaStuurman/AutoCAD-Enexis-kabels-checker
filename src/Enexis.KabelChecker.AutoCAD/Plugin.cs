@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
@@ -103,8 +104,23 @@ internal sealed record PolylinePickResult(
     double LengthMeters,
     string Message);
 
+internal sealed record TextCurrentValue(
+    string SourceText,
+    double Amps);
+
+internal sealed record TextCurrentSelectionResult(
+    bool Cancelled,
+    IReadOnlyList<TextCurrentValue> Values,
+    int InvalidTextObjects,
+    int NonTextObjects,
+    string Message);
+
 internal static class AutoCadSelectionReader
 {
+    private static readonly Regex MTextFormatCode = new(
+        @"\\[A-Za-z][^;]*;",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
     public static PolylinePickResult PickSinglePolyline(Form modelessForm, string cableName)
     {
         var doc = AcApp.DocumentManager.MdiActiveDocument;
@@ -154,6 +170,105 @@ internal static class AutoCadSelectionReader
             return new PolylinePickResult(true, 0, "De geselecteerde polyline heeft geen geldige lengte.");
 
         return new PolylinePickResult(false, lengthMeters, unitWarning);
+    }
+
+    public static TextCurrentSelectionResult ReadSelectedTextCurrents()
+    {
+        var doc = AcApp.DocumentManager.MdiActiveDocument;
+        if (doc is null)
+        {
+            return new TextCurrentSelectionResult(
+                true,
+                Array.Empty<TextCurrentValue>(),
+                0,
+                0,
+                "Geen actieve tekening.");
+        }
+
+        var editor = doc.Editor;
+        var database = doc.Database;
+
+        using var documentLock = doc.LockDocument();
+
+        var options = new PromptSelectionOptions
+        {
+            MessageForAdding = "\nSelecteer TEXT/MTEXT met stroomwaarden en druk Enter: ",
+            MessageForRemoval = "\nVerwijder TEXT/MTEXT uit de selectie: "
+        };
+
+        var selection = editor.GetSelection(options);
+        if (selection.Status != PromptStatus.OK)
+        {
+            return new TextCurrentSelectionResult(
+                true,
+                Array.Empty<TextCurrentValue>(),
+                0,
+                0,
+                "Tekstselectie geannuleerd.");
+        }
+
+        var values = new List<TextCurrentValue>();
+        var invalidTextObjects = 0;
+        var nonTextObjects = 0;
+        var invalidExamples = new List<string>();
+
+        using var transaction = database.TransactionManager.StartTransaction();
+
+        foreach (var id in selection.Value.GetObjectIds())
+        {
+            var dbObject = transaction.GetObject(id, OpenMode.ForRead);
+            string? sourceText = dbObject switch
+            {
+                MText mText => CleanMTextContents(mText.Contents),
+                DBText dbText => dbText.TextString,
+                _ => null
+            };
+
+            if (sourceText is null)
+            {
+                nonTextObjects++;
+                continue;
+            }
+
+            sourceText = sourceText.Trim();
+            if (!CurrentTextParser.TryParseSingleCurrent(sourceText, out var amps))
+            {
+                invalidTextObjects++;
+                if (invalidExamples.Count < 3)
+                    invalidExamples.Add(sourceText);
+                continue;
+            }
+
+            values.Add(new TextCurrentValue(sourceText, amps));
+        }
+
+        transaction.Commit();
+
+        var messages = new List<string>();
+        if (values.Count > 0)
+            messages.Add($"{values.Count} geldige stroomwaarde(n) gelezen uit TEXT/MTEXT.");
+        else
+            messages.Add("Geen eenduidige stroomwaarden gevonden in de geselecteerde TEXT/MTEXT-objecten.");
+
+        if (invalidTextObjects > 0)
+        {
+            var exampleText = invalidExamples.Count > 0
+                ? " Voorbeeld(en): " + string.Join(" | ", invalidExamples.Select(x => $"'{x}'")) + "."
+                : string.Empty;
+            messages.Add(
+                $"{invalidTextObjects} tekstobject(en) overgeslagen omdat er niet precies één geldig getal in stond." +
+                exampleText);
+        }
+
+        if (nonTextObjects > 0)
+            messages.Add($"{nonTextObjects} niet-TEXT/MTEXT object(en) genegeerd.");
+
+        return new TextCurrentSelectionResult(
+            false,
+            values,
+            invalidTextObjects,
+            nonTextObjects,
+            string.Join(Environment.NewLine, messages));
     }
 
     public static SelectionReadResult ReadCurrentDrawing()
@@ -235,6 +350,19 @@ internal static class AutoCadSelectionReader
             messages.Add("Herkende lengtes zijn als segmenten overgenomen. Je kunt extra kabeldelen toevoegen voordat je berekent.");
 
         return new SelectionReadResult(false, lengths, string.Join(Environment.NewLine, messages));
+    }
+
+    private static string CleanMTextContents(string contents)
+    {
+        var cleaned = contents
+            .Replace(@"\P", " ", StringComparison.OrdinalIgnoreCase)
+            .Replace(@"\~", " ", StringComparison.Ordinal);
+
+        cleaned = MTextFormatCode.Replace(cleaned, string.Empty);
+        return cleaned
+            .Replace("{", string.Empty, StringComparison.Ordinal)
+            .Replace("}", string.Empty, StringComparison.Ordinal)
+            .Trim();
     }
 
     private static double GetMetersPerDrawingUnit(UnitsValue units, out string warning)
