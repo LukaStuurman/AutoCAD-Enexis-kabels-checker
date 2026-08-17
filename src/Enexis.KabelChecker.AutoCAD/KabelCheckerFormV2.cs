@@ -17,6 +17,7 @@ internal sealed class KabelCheckerForm : Form
     private readonly Label _fuseResult = new();
     private readonly Label _message = new();
     private readonly ComboBox _savedDirections = new();
+    private readonly NumericUpDown _directionNumber = new();
     private readonly Label _editingLabel = new();
     private readonly List<CableSegment> _segments = new();
     private bool _refreshingGrid;
@@ -36,8 +37,9 @@ internal sealed class KabelCheckerForm : Form
         BuildUi();
         FillCablePicker();
         LoadPresetSegments(presetLengths);
+        _directionNumber.Value = _store.FirstAvailableNumber();
         RefreshSavedDirections();
-        _message.Text = message ?? "Bouw een richting op, lees ontwerpstroom uit tekst en sla de richting op. Daarna kun je meerdere richtingen naar één Excel exporteren.";
+        _message.Text = message ?? "Bouw een richting op, lees ontwerpstroom uit tekst en sla de richting op. Het richtingsnummer wordt bij de eerste kabel automatisch uit bijvoorbeeld K02/K12 gehaald en kan vóór opslaan worden aangepast.";
     }
 
     private void BuildUi()
@@ -102,7 +104,14 @@ internal sealed class KabelCheckerForm : Form
         _editingLabel.Padding = new Padding(0, 5, 10, 0);
         panel.Controls.Add(_editingLabel);
 
-        panel.Controls.Add(new Label { Text = "Opgeslagen:", AutoSize = true, Padding = new Padding(5, 5, 2, 0) });
+        panel.Controls.Add(new Label { Text = "Richtingnr.:", AutoSize = true, Padding = new Padding(5, 5, 2, 0) });
+        _directionNumber.Minimum = 1;
+        _directionNumber.Maximum = 12;
+        _directionNumber.Value = 1;
+        _directionNumber.Width = 55;
+        panel.Controls.Add(_directionNumber);
+
+        panel.Controls.Add(new Label { Text = "Opgeslagen:", AutoSize = true, Padding = new Padding(8, 5, 2, 0) });
         _savedDirections.DropDownStyle = ComboBoxStyle.DropDownList;
         _savedDirections.Width = 170;
         _savedDirections.SelectedIndexChanged += (_, _) => LoadSelectedDirection();
@@ -211,12 +220,22 @@ internal sealed class KabelCheckerForm : Form
     private void PickPolyline(bool useVirtualCut)
     {
         if (_cablePicker.SelectedItem is not CableItem selected) return;
-        var picked = useVirtualCut ? AutoCadSelectionReader.PickPolylinePartToVirtualCut(selected.CableName) : AutoCadSelectionReader.PickSinglePolyline(selected.CableName);
+        var firstCableInNewDirection = _editingDirectionNumber is null && _segments.Count == 0;
+        var picked = useVirtualCut
+            ? DirectionPolylineSelection.PickPolylinePartToVirtualCut(selected.CableName)
+            : DirectionPolylineSelection.PickSinglePolyline(selected.CableName);
         if (picked.Cancelled) { _message.Text = picked.Message; return; }
+
+        if (firstCableInNewDirection && picked.SuggestedDirectionNumber is int suggested)
+            _directionNumber.Value = suggested;
+
         _segments.Add(new CableSegment(selected.CableName, picked.LengthMeters));
         RefreshSegmentGrid();
         ResetResult();
-        _message.Text = $"Toegevoegd: {selected.CableName} — {picked.LengthMeters:0.00} m. {picked.Message}";
+        var directionMessage = firstCableInNewDirection && picked.SuggestedDirectionNumber is int detected
+            ? $" Richtingnummer automatisch ingesteld op {detected} vanuit laag '{picked.LayerName}'."
+            : string.Empty;
+        _message.Text = $"Toegevoegd: {selected.CableName} — {picked.LengthMeters:0.00} m.{directionMessage} {picked.Message}";
     }
 
     private void RemoveSelectedSegment()
@@ -286,6 +305,7 @@ internal sealed class KabelCheckerForm : Form
         try
         {
             _grid.EndEdit();
+            var selectedDirectionNumber = Decimal.ToInt32(_directionNumber.Value);
             var profile = ((ProfileItem)_profile.SelectedItem!).Profile;
             var calculation = _engine.Calculate(_segments, profile);
             _currentLoadPanel.SetCalculation(calculation);
@@ -300,11 +320,12 @@ internal sealed class KabelCheckerForm : Form
             var mapped = ExcelLoadResolver.Resolve(this, currentLoads, existing);
             if (mapped is null) return;
 
-            var saved = _store.Save(_editingDirectionNumber, profile, _segments, currentLoads, mapped);
+            var saved = _store.Save(selectedDirectionNumber, _editingDirectionNumber, profile, _segments, currentLoads, mapped);
             _editingDirectionNumber = saved.Number;
+            _directionNumber.Value = saved.Number;
             _editingLabel.Text = $"Richting {saved.Number} bewerken";
             RefreshSavedDirections(saved.Number);
-            _message.Text = $"Richting {saved.Number} opgeslagen. Deze kan later opnieuw worden geopend, aangepast of verwijderd.";
+            _message.Text = $"Richting {saved.Number} opgeslagen. Het nummer kan later bij openen worden gewijzigd (1 t/m 12).";
         }
         catch (Exception ex)
         {
@@ -316,6 +337,7 @@ internal sealed class KabelCheckerForm : Form
     {
         _editingDirectionNumber = null;
         ClearEditor();
+        _directionNumber.Value = _store.FirstAvailableNumber();
         _editingLabel.Text = "Nieuwe richting";
         _savedDirections.SelectedIndex = -1;
     }
@@ -350,6 +372,7 @@ internal sealed class KabelCheckerForm : Form
         if (state is null) return;
 
         _editingDirectionNumber = state.Number;
+        _directionNumber.Value = state.Number;
         _editingLabel.Text = $"Richting {state.Number} bewerken";
         _profile.SelectedIndex = state.Profile == LoadProfile.Evenredig ? 0 : 1;
         _segments.Clear();
@@ -357,7 +380,7 @@ internal sealed class KabelCheckerForm : Form
         RefreshSegmentGrid();
         _currentLoadPanel.LoadCurrentLoads(state.CurrentLoads);
         ResetResult();
-        _message.Text = $"Richting {state.Number} geladen. Wijzig de invoer en klik daarna op Richting opslaan.";
+        _message.Text = $"Richting {state.Number} geladen. Het nummer bovenaan kan vóór opslaan worden gewijzigd.";
     }
 
     private void RefreshSavedDirections(int? selectNumber = null)

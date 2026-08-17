@@ -10,6 +10,7 @@ internal static class ExcelDirectionExporter
     private const string TransformerSheetName = "Ontwerpstroom_trafo";
     private const string EvenredigControlSheetName = "Controle_kabel_evenredig";
     private const string LastHalfControlSheetName = "Controle_kabel_laatste_helft";
+    private const string EmbeddedTemplateFileName = "Eea-0205.K_2.0.xlsx";
 
     private const int ControlFirstCableRow = 18;
     private const int ControlLastCableRow = 37;
@@ -18,31 +19,11 @@ internal static class ExcelDirectionExporter
 
     public static void Export(string outputPath, IReadOnlyList<DirectionState> directions)
     {
-        using var dialog = new OpenFileDialog
-        {
-            Filter = "Enexis Excel-template (*.xlsx)|*.xlsx",
-            Title = "Kies het Enexis Excel-template",
-            CheckFileExists = true,
-            Multiselect = false
-        };
-
-        if (dialog.ShowDialog() != DialogResult.OK)
-            throw new OperationCanceledException("Excel-export geannuleerd: geen template gekozen.");
-
-        Export(dialog.FileName, outputPath, directions);
-    }
-
-    public static void Export(
-        string templatePath,
-        string outputPath,
-        IReadOnlyList<DirectionState> directions)
-    {
         if (directions.Count == 0)
             throw new InvalidOperationException("Sla eerst minimaal één richting op.");
-        if (string.IsNullOrWhiteSpace(templatePath) || !File.Exists(templatePath))
-            throw new FileNotFoundException("Het gekozen Enexis Excel-template bestaat niet.", templatePath);
 
-        using var workbook = new XLWorkbook(templatePath);
+        using var templateStream = OpenEmbeddedTemplate();
+        using var workbook = new XLWorkbook(templateStream);
         ValidateTemplates(workbook);
 
         var cableTemplate = workbook.Worksheet(CableSheetName);
@@ -63,8 +44,6 @@ internal static class ExcelDirectionExporter
             WriteControlCableLengths(controlSheet, direction.Segments);
         }
 
-        // De generieke brontabbladen bevatten voorbeeld/invoerdata uit de template.
-        // In het exportbestand blijven alleen de per-richting kopieën staan.
         cableTemplate.Delete();
         evenredigTemplate.Delete();
         lastHalfTemplate.Delete();
@@ -78,6 +57,19 @@ internal static class ExcelDirectionExporter
         WriteCounts(transformer, totals);
 
         workbook.SaveAs(outputPath);
+    }
+
+    private static Stream OpenEmbeddedTemplate()
+    {
+        var assembly = typeof(ExcelDirectionExporter).Assembly;
+        var resourceName = assembly.GetManifestResourceNames()
+            .SingleOrDefault(name => name.EndsWith(EmbeddedTemplateFileName, StringComparison.OrdinalIgnoreCase));
+
+        if (resourceName is null)
+            throw new InvalidOperationException("Het ingebouwde Enexis Excel-template kon niet worden gevonden in de plugin.");
+
+        return assembly.GetManifestResourceStream(resourceName)
+            ?? throw new InvalidOperationException("Het ingebouwde Enexis Excel-template kon niet worden geopend.");
     }
 
     private static void ValidateTemplates(XLWorkbook workbook)
@@ -94,7 +86,7 @@ internal static class ExcelDirectionExporter
         if (missing.Length > 0)
         {
             throw new InvalidOperationException(
-                "Het gekozen Excel-template mist: " + string.Join(", ", missing.Select(x => $"'{x}'")) + ".");
+                "Het ingebouwde Excel-template mist: " + string.Join(", ", missing.Select(x => $"'{x}'")) + ".");
         }
     }
 
@@ -148,7 +140,10 @@ internal static class ExcelDirectionExporter
     {
         var lengths = segments
             .GroupBy(x => x.CableName, StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(x => x.Key, x => x.Sum(y => y.LengthMeters), StringComparer.OrdinalIgnoreCase);
+            .ToDictionary(
+                x => x.Key,
+                x => Math.Round(x.Sum(y => y.LengthMeters), 2, MidpointRounding.AwayFromZero),
+                StringComparer.OrdinalIgnoreCase);
 
         foreach (var pair in lengths)
         {
@@ -160,6 +155,7 @@ internal static class ExcelDirectionExporter
             }
 
             sheet.Cell(row.Value, ControlLengthColumn).Value = pair.Value;
+            sheet.Cell(row.Value, ControlLengthColumn).Style.NumberFormat.Format = "0.00";
         }
     }
 
