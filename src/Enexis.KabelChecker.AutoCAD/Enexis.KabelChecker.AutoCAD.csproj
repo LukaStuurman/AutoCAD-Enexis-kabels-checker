@@ -14,6 +14,12 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Enexis.KabelChecker.Core\Enexis.KabelChecker.Core.csproj" />
+    <PackageReference Include="ClosedXML" Version="0.105.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="CurrentLoadPanel.cs" />
+    <Compile Remove="KabelCheckerForm.cs" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(UseAutoCADNuGet)' == 'true'">

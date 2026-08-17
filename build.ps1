@@ -28,8 +28,9 @@ New-Item -ItemType Directory -Path $contents -Force | Out-Null
 Copy-Item $bundleTemplate (Join-Path $bundle "PackageContents.xml") -Force
 
 $output = Join-Path $root "src\Enexis.KabelChecker.AutoCAD\bin\$Configuration\net8.0-windows"
-Copy-Item (Join-Path $output "Enexis.KabelChecker.AutoCAD.dll") $contents -Force
-Copy-Item (Join-Path $output "Enexis.KabelChecker.Core.dll") $contents -Force
+# Neem naast de plugin/core ook ClosedXML en alle runtime-afhankelijkheden mee.
+# AutoCAD assemblies staan op Private=false en komen daardoor niet in deze outputmap terecht.
+Copy-Item (Join-Path $output "*.dll") $contents -Force
 
 Write-Host ""
 Write-Host "Klaar: $bundle"

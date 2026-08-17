@@ -56,8 +56,8 @@ jobs:
           New-Item -ItemType Directory -Path $contents -Force | Out-Null
 
           Copy-Item 'build\PackageContents.xml' (Join-Path $bundle 'PackageContents.xml') -Force
-          Copy-Item (Join-Path $output 'Enexis.KabelChecker.AutoCAD.dll') $contents -Force
-          Copy-Item (Join-Path $output 'Enexis.KabelChecker.Core.dll') $contents -Force
+          # ClosedXML en zijn runtime-afhankelijkheden moeten samen met de plugin DLL mee.
+          Copy-Item (Join-Path $output '*.dll') $contents -Force
           Copy-Item 'build\INSTALLEREN.bat' $releaseRoot -Force
           Copy-Item 'build\VERWIJDEREN.bat' $releaseRoot -Force
           Copy-Item 'build\LEESMIJ.txt' $releaseRoot -Force
@@ -68,6 +68,7 @@ jobs:
           if (-not (Test-Path $zip)) { throw 'Release-ZIP is niet aangemaakt.' }
           if (-not (Test-Path (Join-Path $contents 'Enexis.KabelChecker.AutoCAD.dll'))) { throw 'AutoCAD DLL ontbreekt in de bundle.' }
           if (-not (Test-Path (Join-Path $contents 'Enexis.KabelChecker.Core.dll'))) { throw 'Core DLL ontbreekt in de bundle.' }
+          if (-not (Test-Path (Join-Path $contents 'ClosedXML.dll'))) { throw 'ClosedXML DLL ontbreekt in de bundle.' }
 
           "zip=$zip" >> $env:GITHUB_OUTPUT
           Write-Host "Gemaakt: $zip"
