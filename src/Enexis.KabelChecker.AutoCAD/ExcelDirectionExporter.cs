@@ -15,6 +15,22 @@ internal static class ExcelDirectionExporter
     private const int ControlCableNameColumn = 2;   // B
     private const int ControlLengthColumn = 17;     // Q
 
+    public static void Export(string outputPath, IReadOnlyList<DirectionState> directions)
+    {
+        using var dialog = new OpenFileDialog
+        {
+            Filter = "Enexis Excel-template (*.xlsx)|*.xlsx",
+            Title = "Kies het Enexis Excel-template",
+            CheckFileExists = true,
+            Multiselect = false
+        };
+
+        if (dialog.ShowDialog() != DialogResult.OK)
+            throw new OperationCanceledException("Excel-export geannuleerd: geen template gekozen.");
+
+        Export(dialog.FileName, outputPath, directions);
+    }
+
     public static void Export(
         string templatePath,
         string outputPath,
