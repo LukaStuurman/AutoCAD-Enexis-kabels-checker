@@ -353,8 +353,13 @@ internal sealed class CurrentLoadPanel : UserControl
         return parsed && value > 0 && !double.IsNaN(value) && !double.IsInfinity(value);
     }
 
-    private static bool TryParsePositiveCount(string? text, out int value) =>
-        !string.IsNullOrWhiteSpace(text) && int.TryParse(text.Trim(), NumberStyles.Integer, DutchCulture, out value) && value > 0;
+    private static bool TryParsePositiveCount(string? text, out int value)
+    {
+        value = 0;
+        return !string.IsNullOrWhiteSpace(text) &&
+               int.TryParse(text.Trim(), NumberStyles.Integer, DutchCulture, out value) &&
+               value > 0;
+    }
 
     private static bool SameAmps(double left, double right) => Math.Abs(left - right) <= 1e-9;
     private static string FormatAmps(double value) => value.ToString("0.##", DutchCulture);
