@@ -19,3 +19,6 @@ jobs:
 
       - name: Verify Excel reference cases
         run: dotnet run --project tools/VerifyExcelCases/VerifyExcelCases.csproj -c Release
+
+      - name: Build AutoCAD plugin including Excel export
+        run: dotnet build src/Enexis.KabelChecker.AutoCAD/Enexis.KabelChecker.AutoCAD.csproj -c Release -p:UseAutoCADNuGet=true
