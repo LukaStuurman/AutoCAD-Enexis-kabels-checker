@@ -2,7 +2,7 @@ name: Build AutoCAD installer release
 
 on:
   push:
-    branches: [ main ]
+    branches: [ release/v1.8.0-excel-richtingen ]
     paths:
       - release-version.txt
   workflow_dispatch:
@@ -56,7 +56,6 @@ jobs:
           New-Item -ItemType Directory -Path $contents -Force | Out-Null
 
           Copy-Item 'build\PackageContents.xml' (Join-Path $bundle 'PackageContents.xml') -Force
-          # ClosedXML en zijn runtime-afhankelijkheden moeten samen met de plugin DLL mee.
           Copy-Item (Join-Path $output '*.dll') $contents -Force
           Copy-Item 'build\INSTALLEREN.bat' $releaseRoot -Force
           Copy-Item 'build\VERWIJDEREN.bat' $releaseRoot -Force
@@ -71,8 +70,6 @@ jobs:
           if (-not (Test-Path (Join-Path $contents 'ClosedXML.dll'))) { throw 'ClosedXML DLL ontbreekt in de bundle.' }
 
           "zip=$zip" >> $env:GITHUB_OUTPUT
-          Write-Host "Gemaakt: $zip"
-          Get-ChildItem $releaseRoot -Recurse | Select-Object FullName, Length
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
@@ -90,7 +87,14 @@ jobs:
           $zip = '${{ steps.package.outputs.zip }}'
           $title = "Enexis Kabel Checker v$version - AutoCAD 2025/2026"
           $notes = @"
-          Makkelijk installeerbare AutoCAD-release voor Windows 64-bit.
+          Release vanaf v1.7.1 met ondersteuning voor meerdere opgeslagen richtingen en Excel-export.
+
+          Nieuw:
+          - richtingen opslaan, wijzigen en verwijderen
+          - per richting een ingevulde Ontwerpstroom_kabel-tab
+          - per richting een Controle-kabel-tab op basis van het gekozen profiel
+          - opgetelde Ontwerpstroom_trafo over alle richtingen
+          - Excel-koppeling op woningtype/aantal
 
           Installeren:
           1. Download en pak de ZIP uit.
@@ -98,8 +102,6 @@ jobs:
           3. Dubbelklik INSTALLEREN.bat en bevestig de UAC-melding.
           4. Start AutoCAD 2025 of 2026.
           5. Typ ENEXISKABELCHECK.
-
-          De ZIP bevat de gecompileerde .NET 8 DLL's, de AutoCAD .bundle en een verwijder-script.
           "@
 
           gh release view $tag *> $null
