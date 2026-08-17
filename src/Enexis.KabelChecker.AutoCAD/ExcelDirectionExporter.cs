@@ -1,4 +1,3 @@
-using System.Reflection;
 using ClosedXML.Excel;
 using Enexis.KabelChecker.Core;
 
@@ -10,21 +9,23 @@ internal static class ExcelDirectionExporter
     private const string TransformerSheetName = "Ontwerpstroom_trafo";
     private const string EvenredigControlSheetName = "Controle_kabel_evenredig";
     private const string LastHalfControlSheetName = "Controle_kabel_laatste_helft";
-    private const string TemplateResourceSuffix = "Eea-0205.K_2.0.xlsx";
 
     private const int ControlFirstCableRow = 18;
     private const int ControlLastCableRow = 37;
     private const int ControlCableNameColumn = 2;   // B
     private const int ControlLengthColumn = 17;     // Q
 
-    public static void Export(string outputPath, IReadOnlyList<DirectionState> directions)
+    public static void Export(
+        string templatePath,
+        string outputPath,
+        IReadOnlyList<DirectionState> directions)
     {
         if (directions.Count == 0)
             throw new InvalidOperationException("Sla eerst minimaal één richting op.");
+        if (string.IsNullOrWhiteSpace(templatePath) || !File.Exists(templatePath))
+            throw new FileNotFoundException("Het gekozen Enexis Excel-template bestaat niet.", templatePath);
 
-        using var template = OpenTemplate();
-        using var workbook = new XLWorkbook(template);
-
+        using var workbook = new XLWorkbook(templatePath);
         ValidateTemplates(workbook);
 
         var cableTemplate = workbook.Worksheet(CableSheetName);
@@ -76,21 +77,8 @@ internal static class ExcelDirectionExporter
         if (missing.Length > 0)
         {
             throw new InvalidOperationException(
-                "De ingebouwde Excel-template mist: " + string.Join(", ", missing.Select(x => $"'{x}'")) + ".");
+                "Het gekozen Excel-template mist: " + string.Join(", ", missing.Select(x => $"'{x}'")) + ".");
         }
-    }
-
-    private static Stream OpenTemplate()
-    {
-        var assembly = Assembly.GetExecutingAssembly();
-        var resourceName = assembly.GetManifestResourceNames()
-            .FirstOrDefault(x => x.EndsWith(TemplateResourceSuffix, StringComparison.OrdinalIgnoreCase));
-
-        if (resourceName is null)
-            throw new InvalidOperationException("De ingebouwde Enexis Excel-template kon niet worden gevonden.");
-
-        return assembly.GetManifestResourceStream(resourceName)
-               ?? throw new InvalidOperationException("De ingebouwde Enexis Excel-template kon niet worden geopend.");
     }
 
     private static string BuildDirectionCableSheetName(int directionNumber)
