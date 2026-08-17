@@ -20,7 +20,6 @@
   <ItemGroup>
     <Compile Remove="CurrentLoadPanel.cs" />
     <Compile Remove="KabelCheckerForm.cs" />
-    <EmbeddedResource Include="Resources\Eea-0205.K_2.0.xlsx" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(UseAutoCADNuGet)' == 'true'">
