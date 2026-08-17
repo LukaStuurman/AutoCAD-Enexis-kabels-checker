@@ -143,7 +143,7 @@ internal static class DirectionPolylineSelection
 
     private static DirectionPolylinePickResult Success(double lengthMeters, string layerName, string message)
     {
-        var suggested = TryGetDirectionNumber(layerName, out var number) ? number : null;
+        int? suggested = TryGetDirectionNumber(layerName, out var number) ? number : null;
         return new DirectionPolylinePickResult(false, lengthMeters, layerName, suggested, message);
     }
 
