@@ -10,6 +10,7 @@
     <RootNamespace>Enexis.KabelChecker.AutoCAD</RootNamespace>
     <AutoCADManagedDir Condition="'$(AutoCADManagedDir)' == ''">C:\Program Files\Autodesk\AutoCAD 2025</AutoCADManagedDir>
     <UseAutoCADNuGet Condition="'$(UseAutoCADNuGet)' == ''">false</UseAutoCADNuGet>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
   </PropertyGroup>
 
   <ItemGroup>
