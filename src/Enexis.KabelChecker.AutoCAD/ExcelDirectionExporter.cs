@@ -11,9 +11,12 @@ internal static class ExcelDirectionExporter
     private const string EvenredigControlSheetName = "Controle_kabel_evenredig";
     private const string LastHalfControlSheetName = "Controle_kabel_laatste_helft";
 
+    private const int LegacyCountColumn = 1;              // A
     private const int LegacyControlCableNameColumn = 2;   // B
     private const int LegacyControlLengthColumn = 17;     // Q
     private const int V32CountColumn = 2;                 // B
+    private const int V32CountFirstRow = 5;
+    private const int V32CountLastRow = 79;
     private const int V32ControlCableNameColumn = 15;     // O
     private const int V32ControlLengthColumn = 30;        // AD
 
@@ -64,23 +67,29 @@ internal static class ExcelDirectionExporter
         ValidateLegacyTemplates(workbook);
 
         var cableTemplate = workbook.Worksheet(CableSheetName);
+        var transformer = workbook.Worksheet(TransformerSheetName);
         var evenredigTemplate = workbook.Worksheet(EvenredigControlSheetName);
         var lastHalfTemplate = workbook.Worksheet(LastHalfControlSheetName);
         var (controlFirstRow, controlLastRow) = version == KaderVersion.K2024_1_0
             ? (17, 34)
             : (18, 37);
 
+        // Maak eerst alle invoervelden van het bronkader schoon. Daardoor kunnen
+        // voorbeeldwaarden uit de aangeleverde Excel nooit in een export blijven staan.
+        ClearLegacyCounts(cableTemplate, version);
+        ClearLegacyCounts(transformer, version);
+        ClearControlCableLengths(evenredigTemplate, controlFirstRow, controlLastRow, LegacyControlLengthColumn);
+        ClearControlCableLengths(lastHalfTemplate, controlFirstRow, controlLastRow, LegacyControlLengthColumn);
+
         foreach (var direction in directions.OrderBy(x => x.Number))
         {
             var cableSheet = cableTemplate.CopyTo(BuildDirectionCableSheetName(direction.Number));
-            ClearLegacyCounts(cableSheet, version);
             WriteLegacyDirectionCounts(cableSheet, direction.ExcelLoads, version);
 
             var controlTemplate = direction.Profile == LoadProfile.Evenredig
                 ? evenredigTemplate
                 : lastHalfTemplate;
             var controlSheet = controlTemplate.CopyTo(BuildDirectionControlSheetName(direction));
-            ClearControlCableLengths(controlSheet, controlFirstRow, controlLastRow, LegacyControlLengthColumn);
             WriteControlCableLengths(
                 controlSheet,
                 direction.Segments,
@@ -94,8 +103,6 @@ internal static class ExcelDirectionExporter
         evenredigTemplate.Delete();
         lastHalfTemplate.Delete();
 
-        var transformer = workbook.Worksheet(TransformerSheetName);
-        ClearLegacyCounts(transformer, version);
         var totals = directions
             .SelectMany(x => x.ExcelLoads)
             .GroupBy(x => x.ExcelLoadKey, StringComparer.OrdinalIgnoreCase)
@@ -110,10 +117,12 @@ internal static class ExcelDirectionExporter
     {
         Validate2026Templates(workbook);
 
+        // Kader 3.2 bevat twaalf vaste richtingstabbladen. Maak alle invoervelden
+        // in alle twaalf bladen schoon, ook wanneer een richting niet wordt gebruikt.
         for (var number = 1; number <= 12; number++)
         {
             var sheet = workbook.Worksheet($"({number})");
-            Clear2026Counts(sheet, version);
+            Clear2026Counts(sheet);
             ClearControlCableLengths(sheet, 18, 36, V32ControlLengthColumn);
             ClearControlCableLengths(sheet, 64, 82, V32ControlLengthColumn);
         }
@@ -147,7 +156,7 @@ internal static class ExcelDirectionExporter
 
         // In kader 3.2 wordt het tabblad Transformator volledig door formules gevoed
         // vanuit de aantallen in B op de richtingstabbladen (1) t/m (12). Daarom
-        // schrijft de plugin bewust niets naar Transformator.
+        // schrijft of wist de plugin bewust niets in Transformator.
     }
 
     private static Stream OpenEmbeddedTemplate(string embeddedTemplateFileName)
@@ -207,8 +216,17 @@ internal static class ExcelDirectionExporter
 
     private static void ClearLegacyCounts(IXLWorksheet sheet, KaderVersion version)
     {
-        foreach (var option in ExcelLoadCatalog.For(version))
-            sheet.Cell(option.Row, 1).Clear(XLClearOptions.Contents);
+        var options = ExcelLoadCatalog.For(version);
+        if (options.Count == 0)
+            return;
+
+        // Kolom A is in de oude kaders de invoerkolom voor aantallen. Wis het
+        // volledige invoergebied tussen de eerste en laatste bekende belastingrij,
+        // zodat ook eventuele voorbeeldwaarden op tussenliggende invoerrijen verdwijnen.
+        var firstRow = options.Min(x => x.Row);
+        var lastRow = options.Max(x => x.Row);
+        for (var row = firstRow; row <= lastRow; row++)
+            sheet.Cell(row, LegacyCountColumn).Clear(XLClearOptions.Contents);
     }
 
     private static void WriteLegacyDirectionCounts(
@@ -233,14 +251,16 @@ internal static class ExcelDirectionExporter
             if (option is null)
                 throw new InvalidOperationException($"Onbekende Excel-belastingcode voor {KaderVersions.Get(version).DisplayName}: {pair.Key}.");
 
-            sheet.Cell(option.Row, 1).Value = pair.Value;
+            sheet.Cell(option.Row, LegacyCountColumn).Value = pair.Value;
         }
     }
 
-    private static void Clear2026Counts(IXLWorksheet sheet, KaderVersion version)
+    private static void Clear2026Counts(IXLWorksheet sheet)
     {
-        foreach (var option in ExcelLoadCatalog.For(version))
-            sheet.Cell(option.Row, V32CountColumn).Clear(XLClearOptions.Contents);
+        // In 3.2 is B5:B79 het invoergebied voor aantallen/eenheden. Dit wordt
+        // volledig leeggemaakt; de vaste teksten, ontwerpstromen en formules staan elders.
+        for (var row = V32CountFirstRow; row <= V32CountLastRow; row++)
+            sheet.Cell(row, V32CountColumn).Clear(XLClearOptions.Contents);
     }
 
     private static void Write2026Counts(
@@ -268,6 +288,8 @@ internal static class ExcelDirectionExporter
         int lastRow,
         int lengthColumn)
     {
+        // Alleen inhoud wissen: opmaak, kleuren, validatie en formules buiten het
+        // kabel-invoergebied blijven intact.
         for (var row = firstRow; row <= lastRow; row++)
             sheet.Cell(row, lengthColumn).Clear(XLClearOptions.Contents);
     }
