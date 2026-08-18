@@ -10,7 +10,10 @@ internal enum KaderVersion
 internal sealed record KaderVersionDefinition(
     KaderVersion Version,
     string DisplayName,
-    string ResourceFileName);
+    string ResourceFileName)
+{
+    public override string ToString() => DisplayName;
+}
 
 internal static class KaderVersions
 {
@@ -27,100 +30,11 @@ internal static class KaderVersions
 
 internal static class KaderVersionSelection
 {
-    public static KaderVersion? Current { get; private set; }
+    public static KaderVersion Current { get; private set; } = KaderVersion.K2026_3_2;
 
-    public static KaderVersion EnsureSelected(IWin32Window? owner)
-    {
-        if (Current is KaderVersion selected)
-            return selected;
+    public static void SetCurrent(KaderVersion version) => Current = version;
 
-        Current = ShowSelector(owner, KaderVersion.K2026_3_2);
-        return Current.Value;
-    }
+    public static KaderVersion EnsureSelected(IWin32Window? owner = null) => Current;
 
-    public static KaderVersion SelectForExport(IWin32Window? owner)
-    {
-        var initial = Current ?? KaderVersion.K2026_3_2;
-        Current = ShowSelector(owner, initial);
-        return Current.Value;
-    }
-
-    private static KaderVersion ShowSelector(IWin32Window? owner, KaderVersion initial)
-    {
-        using var dialog = new Form
-        {
-            Text = "Kader versie",
-            StartPosition = FormStartPosition.CenterParent,
-            FormBorderStyle = FormBorderStyle.FixedDialog,
-            AutoSize = true,
-            AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            MinimizeBox = false,
-            MaximizeBox = false,
-            ShowInTaskbar = false,
-            Padding = new Padding(10)
-        };
-
-        var root = new TableLayoutPanel
-        {
-            AutoSize = true,
-            ColumnCount = 2,
-            RowCount = 3,
-            Padding = new Padding(4)
-        };
-        root.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        root.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-
-        root.Controls.Add(new Label
-        {
-            Text = "Kader versie:",
-            AutoSize = true,
-            Padding = new Padding(0, 6, 10, 0)
-        }, 0, 0);
-
-        var picker = new ComboBox
-        {
-            DropDownStyle = ComboBoxStyle.DropDownList,
-            Width = 270
-        };
-        foreach (var definition in KaderVersions.All)
-            picker.Items.Add(new VersionItem(definition));
-        picker.SelectedIndex = Math.Max(0, KaderVersions.All.ToList().FindIndex(x => x.Version == initial));
-        root.Controls.Add(picker, 1, 0);
-
-        var explanation = new Label
-        {
-            AutoSize = true,
-            MaximumSize = new Size(500, 0),
-            Margin = new Padding(0, 10, 0, 8),
-            Text = "De gekozen kaderversie bepaalt zowel de ontwerpstroom-koppeling als de Excel-template en de cellen die worden ingevuld."
-        };
-        root.Controls.Add(explanation, 0, 1);
-        root.SetColumnSpan(explanation, 2);
-
-        var buttons = new FlowLayoutPanel
-        {
-            AutoSize = true,
-            FlowDirection = FlowDirection.RightToLeft,
-            WrapContents = false
-        };
-        var ok = new Button { Text = "Gebruiken", DialogResult = DialogResult.OK, AutoSize = true };
-        buttons.Controls.Add(ok);
-        root.Controls.Add(buttons, 0, 2);
-        root.SetColumnSpan(buttons, 2);
-
-        dialog.Controls.Add(root);
-        dialog.AcceptButton = ok;
-
-        if (owner is null)
-            dialog.ShowDialog();
-        else
-            dialog.ShowDialog(owner);
-
-        return picker.SelectedItem is VersionItem item ? item.Definition.Version : initial;
-    }
-
-    private sealed record VersionItem(KaderVersionDefinition Definition)
-    {
-        public override string ToString() => Definition.DisplayName;
-    }
+    public static KaderVersion SelectForExport(IWin32Window? owner = null) => Current;
 }

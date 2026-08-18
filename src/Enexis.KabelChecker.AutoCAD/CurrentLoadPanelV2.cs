@@ -9,6 +9,7 @@ internal sealed class CurrentLoadPanel : UserControl
     private static readonly CultureInfo DutchCulture = CultureInfo.GetCultureInfo("nl-NL");
 
     private readonly NumericUpDown _radiusMeters = new();
+    private readonly ComboBox _kaderVersion = new();
     private readonly DataGridView _grid = new();
     private readonly Label _total = new();
     private readonly Label _assessment = new();
@@ -77,6 +78,31 @@ internal sealed class CurrentLoadPanel : UserControl
             WrapContents = false,
             AutoSize = true
         };
+
+        var kader = new FlowLayoutPanel { AutoSize = true, WrapContents = false };
+        kader.Controls.Add(new Label
+        {
+            Text = "Kader versie:",
+            AutoSize = true,
+            Font = new Font(SystemFonts.MessageBoxFont.FontFamily, 9F, FontStyle.Bold),
+            Padding = new Padding(0, 5, 3, 0)
+        });
+        _kaderVersion.DropDownStyle = ComboBoxStyle.DropDownList;
+        _kaderVersion.Width = 220;
+        foreach (var definition in KaderVersions.All)
+            _kaderVersion.Items.Add(definition);
+        _kaderVersion.SelectedIndexChanged += (_, _) =>
+        {
+            if (_kaderVersion.SelectedItem is KaderVersionDefinition selected)
+            {
+                KaderVersionSelection.SetCurrent(selected.Version);
+                _details.Text = $"Kaderversie ingesteld op {selected.DisplayName}.";
+            }
+        };
+        _kaderVersion.SelectedItem = KaderVersions.Get(KaderVersionSelection.Current);
+        kader.Controls.Add(_kaderVersion);
+        actions.Controls.Add(kader);
+
         actions.Controls.Add(new Label
         {
             Text = "Ontwerpstroom uit tekst",
@@ -108,7 +134,7 @@ internal sealed class CurrentLoadPanel : UserControl
         actions.Controls.Add(radius);
         actions.Controls.Add(new Label
         {
-            Text = "Unieke Excel-ontwerpstromen worden automatisch gekoppeld. Bij een dubbele waarde, zoals 4,1 A, kies je bij opslaan de verdeling over de woningtypen.",
+            Text = "De gekozen kaderversie bepaalt de Excel-ontwerpstromen en invoerrijen. Unieke ontwerpstromen worden automatisch gekoppeld; bij een dubbele waarde kies je bij opslaan de juiste verdeling.",
             AutoSize = true,
             MaximumSize = new Size(300, 0)
         });
