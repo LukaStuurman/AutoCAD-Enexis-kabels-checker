@@ -7,6 +7,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\Enexis.KabelChecker.Core\Enexis.KabelChecker.Core.csproj" />
+    <PackageReference Include="ClosedXML" Version="0.105.1" />
   </ItemGroup>
 </Project>
