@@ -1,23 +1,56 @@
 using ClosedXML.Excel;
-var file = Path.Combine(Directory.GetCurrentDirectory(), "src", "Enexis.KabelChecker.AutoCAD", "Resources", "Eea-0205.K 3.2.xlsx");
-using var wb = new XLWorkbook(file);
-var ws = wb.Worksheet("(1)");
-Console.WriteLine("DETAIL_ROWS");
-for (var row = 1; row <= 81; row++)
+
+var root = Path.Combine(Directory.GetCurrentDirectory(), "src", "Enexis.KabelChecker.AutoCAD", "Resources");
+CheckLegacy(Path.Combine(root, "Eea-0205.K 1.0 - Copy.xlsx"), 17);
+CheckLegacy(Path.Combine(root, "Eea-0205.K_2.0.xlsx"), 18);
+Check2026(Path.Combine(root, "Eea-0205.K 3.2.xlsx"));
+Console.WriteLine("Alle drie kaderversies kunnen worden ingevuld, opgeslagen en opnieuw geopend.");
+
+static void CheckLegacy(string source, int controlRow)
 {
-    var vals = new List<string>();
-    for (var col = 1; col <= 8; col++)
+    var output = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.xlsx");
+    using (var wb = new XLWorkbook(source))
     {
-        var value = ws.Cell(row, col).GetFormattedString().Replace("\r", " ").Replace("\n", " ").Trim();
-        if (!string.IsNullOrWhiteSpace(value)) vals.Add($"{ws.Cell(row,col).Address}=[{value}]");
+        wb.Worksheet("Ontwerpstroom_kabel").Cell(5, 1).Value = 2;
+        wb.Worksheet("Controle_kabel_evenredig").Cell(controlRow, 17).Value = 12.34;
+        wb.SaveAs(output);
     }
-    if (vals.Count > 0) Console.WriteLine(string.Join(" | ", vals));
+    using (var wb = new XLWorkbook(output))
+    {
+        if (wb.Worksheet("Ontwerpstroom_kabel").Cell(5, 1).GetDouble() != 2)
+            throw new InvalidOperationException($"{Path.GetFileName(source)}: aantal niet bewaard.");
+        if (Math.Abs(wb.Worksheet("Controle_kabel_evenredig").Cell(controlRow, 17).GetDouble() - 12.34) > 1e-9)
+            throw new InvalidOperationException($"{Path.GetFileName(source)}: kabellengte niet bewaard.");
+    }
+    File.Delete(output);
+    Console.WriteLine($"OK - {Path.GetFileName(source)}");
 }
-Console.WriteLine("TRAFO_FORMULAS");
-var trafo = wb.Worksheet("Transformator");
-for (var row = 1; row <= 83; row++)
-for (var col = 1; col <= 14; col++)
+
+static void Check2026(string source)
 {
-    var cell = trafo.Cell(row,col);
-    if (cell.HasFormula && cell.FormulaA1.Contains("(1)")) Console.WriteLine($"{cell.Address}={cell.FormulaA1}");
+    var output = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.xlsx");
+    using (var wb = new XLWorkbook(source))
+    {
+        var direction = wb.Worksheet("(1)");
+        direction.Cell(5, 2).Value = 3;
+        direction.Cell(18, 30).Value = 45.67;
+        direction.Cell(64, 30).Value = 45.67;
+        if (!wb.Worksheet("Transformator").Cell(5, 2).HasFormula)
+            throw new InvalidOperationException("3.2: Transformator B5 moet een formule blijven.");
+        wb.SaveAs(output);
+    }
+    using (var wb = new XLWorkbook(output))
+    {
+        var direction = wb.Worksheet("(1)");
+        if (direction.Cell(5, 2).GetDouble() != 3)
+            throw new InvalidOperationException("3.2: richting-aantal niet bewaard.");
+        if (Math.Abs(direction.Cell(18, 30).GetDouble() - 45.67) > 1e-9)
+            throw new InvalidOperationException("3.2: evenredige kabellengte niet bewaard.");
+        if (Math.Abs(direction.Cell(64, 30).GetDouble() - 45.67) > 1e-9)
+            throw new InvalidOperationException("3.2: laatste-helft kabellengte niet bewaard.");
+        if (!wb.Worksheet("Transformator").Cell(5, 2).HasFormula)
+            throw new InvalidOperationException("3.2: Transformator-formule is verloren gegaan.");
+    }
+    File.Delete(output);
+    Console.WriteLine("OK - Eea-0205.K 3.2.xlsx inclusief Transformator-formule");
 }
