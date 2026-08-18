@@ -10,38 +10,84 @@ internal static class ExcelDirectionExporter
     private const string TransformerSheetName = "Ontwerpstroom_trafo";
     private const string EvenredigControlSheetName = "Controle_kabel_evenredig";
     private const string LastHalfControlSheetName = "Controle_kabel_laatste_helft";
-    private const string EmbeddedTemplateFileName = "Eea-0205.K_2.0.xlsx";
 
-    private const int ControlFirstCableRow = 18;
-    private const int ControlLastCableRow = 37;
-    private const int ControlCableNameColumn = 2;   // B
-    private const int ControlLengthColumn = 17;     // Q
+    private const int LegacyControlCableNameColumn = 2;   // B
+    private const int LegacyControlLengthColumn = 17;     // Q
+    private const int V32CountColumn = 2;                 // B
+    private const int V32ControlCableNameColumn = 15;     // O
+    private const int V32ControlLengthColumn = 30;        // AD
 
     public static void Export(string outputPath, IReadOnlyList<DirectionState> directions)
     {
         if (directions.Count == 0)
             throw new InvalidOperationException("Sla eerst minimaal één richting op.");
 
-        using var templateStream = OpenEmbeddedTemplate();
+        var owner = Form.ActiveForm;
+        var version = KaderVersionSelection.SelectForExport(owner);
+        var resolvedDirections = ResolveForVersion(owner, directions, version);
+        var definition = KaderVersions.Get(version);
+
+        using var templateStream = OpenEmbeddedTemplate(definition.ResourceFileName);
         using var workbook = new XLWorkbook(templateStream);
-        ValidateTemplates(workbook);
+
+        if (version == KaderVersion.K2026_3_2)
+            Export2026(workbook, resolvedDirections, version);
+        else
+            ExportLegacy(workbook, resolvedDirections, version);
+
+        workbook.SaveAs(outputPath);
+    }
+
+    private static IReadOnlyList<DirectionState> ResolveForVersion(
+        IWin32Window? owner,
+        IReadOnlyList<DirectionState> directions,
+        KaderVersion version)
+    {
+        var result = new List<DirectionState>();
+        foreach (var direction in directions.OrderBy(x => x.Number))
+        {
+            var mapped = ExcelLoadResolver.Resolve(owner, direction.CurrentLoads, version, direction.ExcelLoads);
+            if (mapped is null)
+                throw new OperationCanceledException("Excel-export geannuleerd tijdens het koppelen van de ontwerpstromen.");
+
+            result.Add(direction with { ExcelLoads = mapped });
+        }
+
+        return result;
+    }
+
+    private static void ExportLegacy(
+        XLWorkbook workbook,
+        IReadOnlyList<DirectionState> directions,
+        KaderVersion version)
+    {
+        ValidateLegacyTemplates(workbook);
 
         var cableTemplate = workbook.Worksheet(CableSheetName);
         var evenredigTemplate = workbook.Worksheet(EvenredigControlSheetName);
         var lastHalfTemplate = workbook.Worksheet(LastHalfControlSheetName);
+        var (controlFirstRow, controlLastRow) = version == KaderVersion.K2024_1_0
+            ? (17, 34)
+            : (18, 37);
 
         foreach (var direction in directions.OrderBy(x => x.Number))
         {
             var cableSheet = cableTemplate.CopyTo(BuildDirectionCableSheetName(direction.Number));
-            ClearCounts(cableSheet);
-            WriteDirectionCounts(cableSheet, direction.ExcelLoads);
+            ClearLegacyCounts(cableSheet, version);
+            WriteLegacyDirectionCounts(cableSheet, direction.ExcelLoads, version);
 
             var controlTemplate = direction.Profile == LoadProfile.Evenredig
                 ? evenredigTemplate
                 : lastHalfTemplate;
             var controlSheet = controlTemplate.CopyTo(BuildDirectionControlSheetName(direction));
-            ClearControlCableLengths(controlSheet);
-            WriteControlCableLengths(controlSheet, direction.Segments);
+            ClearControlCableLengths(controlSheet, controlFirstRow, controlLastRow, LegacyControlLengthColumn);
+            WriteControlCableLengths(
+                controlSheet,
+                direction.Segments,
+                controlFirstRow,
+                controlLastRow,
+                LegacyControlCableNameColumn,
+                LegacyControlLengthColumn);
         }
 
         cableTemplate.Delete();
@@ -49,30 +95,75 @@ internal static class ExcelDirectionExporter
         lastHalfTemplate.Delete();
 
         var transformer = workbook.Worksheet(TransformerSheetName);
-        ClearCounts(transformer);
+        ClearLegacyCounts(transformer, version);
         var totals = directions
             .SelectMany(x => x.ExcelLoads)
             .GroupBy(x => x.ExcelLoadKey, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(x => x.Key, x => x.Sum(y => y.Count), StringComparer.OrdinalIgnoreCase);
-        WriteCounts(transformer, totals);
-
-        workbook.SaveAs(outputPath);
+        WriteLegacyCounts(transformer, totals, version);
     }
 
-    private static Stream OpenEmbeddedTemplate()
+    private static void Export2026(
+        XLWorkbook workbook,
+        IReadOnlyList<DirectionState> directions,
+        KaderVersion version)
+    {
+        Validate2026Templates(workbook);
+
+        for (var number = 1; number <= 12; number++)
+        {
+            var sheet = workbook.Worksheet($"({number})");
+            Clear2026Counts(sheet, version);
+            ClearControlCableLengths(sheet, 18, 36, V32ControlLengthColumn);
+            ClearControlCableLengths(sheet, 64, 82, V32ControlLengthColumn);
+        }
+
+        foreach (var direction in directions.OrderBy(x => x.Number))
+        {
+            var sheet = workbook.Worksheet($"({direction.Number})");
+            Write2026Counts(sheet, direction.ExcelLoads, version);
+
+            if (direction.Profile == LoadProfile.Evenredig)
+            {
+                WriteControlCableLengths(
+                    sheet,
+                    direction.Segments,
+                    18,
+                    36,
+                    V32ControlCableNameColumn,
+                    V32ControlLengthColumn);
+            }
+            else
+            {
+                WriteControlCableLengths(
+                    sheet,
+                    direction.Segments,
+                    64,
+                    82,
+                    V32ControlCableNameColumn,
+                    V32ControlLengthColumn);
+            }
+        }
+
+        // In kader 3.2 wordt het tabblad Transformator volledig door formules gevoed
+        // vanuit de aantallen in B op de richtingstabbladen (1) t/m (12). Daarom
+        // schrijft de plugin bewust niets naar Transformator.
+    }
+
+    private static Stream OpenEmbeddedTemplate(string embeddedTemplateFileName)
     {
         var assembly = typeof(ExcelDirectionExporter).Assembly;
         var resourceName = assembly.GetManifestResourceNames()
-            .SingleOrDefault(name => name.EndsWith(EmbeddedTemplateFileName, StringComparison.OrdinalIgnoreCase));
+            .SingleOrDefault(name => name.EndsWith(embeddedTemplateFileName, StringComparison.OrdinalIgnoreCase));
 
         if (resourceName is null)
-            throw new InvalidOperationException("Het ingebouwde Enexis Excel-template kon niet worden gevonden in de plugin.");
+            throw new InvalidOperationException($"Het ingebouwde Enexis Excel-template '{embeddedTemplateFileName}' kon niet worden gevonden in de plugin.");
 
         return assembly.GetManifestResourceStream(resourceName)
-            ?? throw new InvalidOperationException("Het ingebouwde Enexis Excel-template kon niet worden geopend.");
+            ?? throw new InvalidOperationException($"Het ingebouwde Enexis Excel-template '{embeddedTemplateFileName}' kon niet worden geopend.");
     }
 
-    private static void ValidateTemplates(XLWorkbook workbook)
+    private static void ValidateLegacyTemplates(XLWorkbook workbook)
     {
         var required = new[]
         {
@@ -84,10 +175,20 @@ internal static class ExcelDirectionExporter
 
         var missing = required.Where(x => !workbook.Worksheets.Contains(x)).ToArray();
         if (missing.Length > 0)
-        {
-            throw new InvalidOperationException(
-                "Het Excel-template mist: " + string.Join(", ", missing.Select(x => $"'{x}'")) + ".");
-        }
+            throw new InvalidOperationException("Het Excel-template mist: " + string.Join(", ", missing.Select(x => $"'{x}'")) + ".");
+    }
+
+    private static void Validate2026Templates(XLWorkbook workbook)
+    {
+        var missing = Enumerable.Range(1, 12)
+            .Select(number => $"({number})")
+            .Where(name => !workbook.Worksheets.Contains(name))
+            .ToList();
+        if (!workbook.Worksheets.Contains("Transformator"))
+            missing.Add("Transformator");
+
+        if (missing.Count > 0)
+            throw new InvalidOperationException("Kader 3.2 mist: " + string.Join(", ", missing.Select(x => $"'{x}'")) + ".");
     }
 
     private static string BuildDirectionCableSheetName(int directionNumber)
@@ -104,39 +205,80 @@ internal static class ExcelDirectionExporter
     private static string BuildSafeSheetName(string preferred, string fallback) =>
         preferred.Length <= 31 ? preferred : fallback;
 
-    private static void ClearCounts(IXLWorksheet sheet)
+    private static void ClearLegacyCounts(IXLWorksheet sheet, KaderVersion version)
     {
-        foreach (var option in ExcelLoadCatalog.All)
+        foreach (var option in ExcelLoadCatalog.For(version))
             sheet.Cell(option.Row, 1).Clear(XLClearOptions.Contents);
     }
 
-    private static void WriteDirectionCounts(IXLWorksheet sheet, IReadOnlyList<ExcelMappedLoad> loads)
+    private static void WriteLegacyDirectionCounts(
+        IXLWorksheet sheet,
+        IReadOnlyList<ExcelMappedLoad> loads,
+        KaderVersion version)
     {
         var counts = loads
             .GroupBy(x => x.ExcelLoadKey, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(x => x.Key, x => x.Sum(y => y.Count), StringComparer.OrdinalIgnoreCase);
-        WriteCounts(sheet, counts);
+        WriteLegacyCounts(sheet, counts, version);
     }
 
-    private static void WriteCounts(IXLWorksheet sheet, IReadOnlyDictionary<string, int> counts)
+    private static void WriteLegacyCounts(
+        IXLWorksheet sheet,
+        IReadOnlyDictionary<string, int> counts,
+        KaderVersion version)
     {
         foreach (var pair in counts)
         {
-            var option = ExcelLoadCatalog.FindByKey(pair.Key);
+            var option = ExcelLoadCatalog.FindByKey(version, pair.Key);
             if (option is null)
-                throw new InvalidOperationException($"Onbekende Excel-belastingcode: {pair.Key}.");
+                throw new InvalidOperationException($"Onbekende Excel-belastingcode voor {KaderVersions.Get(version).DisplayName}: {pair.Key}.");
 
             sheet.Cell(option.Row, 1).Value = pair.Value;
         }
     }
 
-    private static void ClearControlCableLengths(IXLWorksheet sheet)
+    private static void Clear2026Counts(IXLWorksheet sheet, KaderVersion version)
     {
-        for (var row = ControlFirstCableRow; row <= ControlLastCableRow; row++)
-            sheet.Cell(row, ControlLengthColumn).Clear(XLClearOptions.Contents);
+        foreach (var option in ExcelLoadCatalog.For(version))
+            sheet.Cell(option.Row, V32CountColumn).Clear(XLClearOptions.Contents);
     }
 
-    private static void WriteControlCableLengths(IXLWorksheet sheet, IReadOnlyList<CableSegment> segments)
+    private static void Write2026Counts(
+        IXLWorksheet sheet,
+        IReadOnlyList<ExcelMappedLoad> loads,
+        KaderVersion version)
+    {
+        var counts = loads
+            .GroupBy(x => x.ExcelLoadKey, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(x => x.Key, x => x.Sum(y => y.Count), StringComparer.OrdinalIgnoreCase);
+
+        foreach (var pair in counts)
+        {
+            var option = ExcelLoadCatalog.FindByKey(version, pair.Key);
+            if (option is null)
+                throw new InvalidOperationException($"Onbekende Excel-belastingcode voor kader 3.2: {pair.Key}.");
+
+            sheet.Cell(option.Row, V32CountColumn).Value = pair.Value;
+        }
+    }
+
+    private static void ClearControlCableLengths(
+        IXLWorksheet sheet,
+        int firstRow,
+        int lastRow,
+        int lengthColumn)
+    {
+        for (var row = firstRow; row <= lastRow; row++)
+            sheet.Cell(row, lengthColumn).Clear(XLClearOptions.Contents);
+    }
+
+    private static void WriteControlCableLengths(
+        IXLWorksheet sheet,
+        IReadOnlyList<CableSegment> segments,
+        int firstRow,
+        int lastRow,
+        int cableNameColumn,
+        int lengthColumn)
     {
         var lengths = segments
             .GroupBy(x => x.CableName, StringComparer.OrdinalIgnoreCase)
@@ -147,23 +289,28 @@ internal static class ExcelDirectionExporter
 
         foreach (var pair in lengths)
         {
-            var row = FindControlCableRow(sheet, pair.Key);
+            var row = FindControlCableRow(sheet, pair.Key, firstRow, lastRow, cableNameColumn);
             if (row is null)
             {
                 throw new InvalidOperationException(
                     $"Kabeltype '{pair.Key}' uit richtinggegevens is niet gevonden in tabblad '{sheet.Name}'.");
             }
 
-            sheet.Cell(row.Value, ControlLengthColumn).Value = pair.Value;
-            sheet.Cell(row.Value, ControlLengthColumn).Style.NumberFormat.Format = "0.00";
+            sheet.Cell(row.Value, lengthColumn).Value = pair.Value;
+            sheet.Cell(row.Value, lengthColumn).Style.NumberFormat.Format = "0.00";
         }
     }
 
-    private static int? FindControlCableRow(IXLWorksheet sheet, string cableName)
+    private static int? FindControlCableRow(
+        IXLWorksheet sheet,
+        string cableName,
+        int firstRow,
+        int lastRow,
+        int cableNameColumn)
     {
-        for (var row = ControlFirstCableRow; row <= ControlLastCableRow; row++)
+        for (var row = firstRow; row <= lastRow; row++)
         {
-            var name = sheet.Cell(row, ControlCableNameColumn).GetString().Trim();
+            var name = sheet.Cell(row, cableNameColumn).GetString().Trim();
             if (name.Equals(cableName, StringComparison.OrdinalIgnoreCase))
                 return row;
         }
