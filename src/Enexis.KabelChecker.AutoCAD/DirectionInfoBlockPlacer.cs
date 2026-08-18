@@ -4,9 +4,61 @@ using Autodesk.AutoCAD.Colors;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Geometry;
+using Autodesk.AutoCAD.Runtime;
 using AcApp = Autodesk.AutoCAD.ApplicationServices.Application;
 
+[assembly: CommandClass(typeof(Enexis.KabelChecker.AutoCAD.DirectionInfoCommands))]
+
 namespace Enexis.KabelChecker.AutoCAD;
+
+public sealed class DirectionInfoCommands
+{
+    [CommandMethod("ENEXISRICHTINGINFO", CommandFlags.Modal)]
+    public void PlaceDirectionInfo()
+    {
+        var doc = AcApp.DocumentManager.MdiActiveDocument;
+        if (doc is null)
+            return;
+
+        var directions = DirectionStore.Instance.Directions;
+        if (directions.Count == 0)
+        {
+            doc.Editor.WriteMessage("\nSla eerst minimaal één richting op in ENEXISKABELCHECK.");
+            return;
+        }
+
+        var options = new PromptIntegerOptions("\nRichtingnummer voor info (1-12): ")
+        {
+            LowerLimit = 1,
+            UpperLimit = 12,
+            DefaultValue = directions[0].Number,
+            UseDefaultValue = true,
+            AllowNone = true
+        };
+
+        var result = doc.Editor.GetInteger(options);
+        if (result.Status is not PromptStatus.OK and not PromptStatus.None)
+            return;
+
+        var number = result.Status == PromptStatus.None ? options.DefaultValue : result.Value;
+        var direction = DirectionStore.Instance.Get(number);
+        if (direction is null)
+        {
+            doc.Editor.WriteMessage($"\nRichting {number} is niet opgeslagen in de huidige pluginsessie.");
+            return;
+        }
+
+        try
+        {
+            var message = DirectionInfoBlockPlacer.Place(direction);
+            doc.Editor.WriteMessage($"\n{message}");
+        }
+        catch (Exception ex)
+        {
+            doc.Editor.WriteMessage($"\nRichting-info kon niet worden geplaatst: {ex.Message}");
+        }
+    }
+}
 
 internal static class DirectionInfoBlockPlacer
 {
@@ -49,9 +101,7 @@ internal static class DirectionInfoBlockPlacer
         var currentText = $"Ontwerpstroom: {totalCurrent.ToString("0.##", DutchCulture)} A";
         var lengthText = $"Totale lengte: {totalLength.ToString("0.00", DutchCulture)} m";
 
-        var blockTable = (BlockTable)transaction.GetObject(database.BlockTableId, OpenMode.ForRead);
         var currentSpace = (BlockTableRecord)transaction.GetObject(database.CurrentSpaceId, OpenMode.ForWrite);
-
         var topPoint = pointResult.Value;
         var bottomPoint = new Point3d(topPoint.X, topPoint.Y - (TextHeight * LineSpacing), topPoint.Z);
 
