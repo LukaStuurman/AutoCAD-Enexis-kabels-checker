@@ -1,44 +1,23 @@
 using ClosedXML.Excel;
-
 var file = Path.Combine(Directory.GetCurrentDirectory(), "src", "Enexis.KabelChecker.AutoCAD", "Resources", "Eea-0205.K 3.2.xlsx");
 using var wb = new XLWorkbook(file);
 var ws = wb.Worksheet("(1)");
-
-Console.WriteLine("LOADS");
-for (var row = 1; row <= 83; row++)
+Console.WriteLine("DETAIL_ROWS");
+for (var row = 1; row <= 81; row++)
 {
-    var b = ws.Cell(row, 2).GetFormattedString().Trim();
-    var c = ws.Cell(row, 3).GetFormattedString().Trim();
-    var f = ws.Cell(row, 6).GetFormattedString().Trim();
-    var g = ws.Cell(row, 7).GetFormattedString().Trim();
-    if (!string.IsNullOrWhiteSpace(b) || !string.IsNullOrWhiteSpace(c) || !string.IsNullOrWhiteSpace(f) || !string.IsNullOrWhiteSpace(g))
-        Console.WriteLine($"R{row}: B=[{b}] C=[{c}] F=[{f}] G=[{g}]");
+    var vals = new List<string>();
+    for (var col = 1; col <= 8; col++)
+    {
+        var value = ws.Cell(row, col).GetFormattedString().Replace("\r", " ").Replace("\n", " ").Trim();
+        if (!string.IsNullOrWhiteSpace(value)) vals.Add($"{ws.Cell(row,col).Address}=[{value}]");
+    }
+    if (vals.Count > 0) Console.WriteLine(string.Join(" | ", vals));
 }
-
-Console.WriteLine("EVENREDIG");
-for (var row = 12; row <= 45; row++)
-{
-    var o = ws.Cell(row, 15).GetFormattedString().Trim();
-    var p = ws.Cell(row, 16).GetFormattedString().Trim();
-    var ad = ws.Cell(row, 30).GetFormattedString().Trim();
-    if (!string.IsNullOrWhiteSpace(o) || !string.IsNullOrWhiteSpace(p) || !string.IsNullOrWhiteSpace(ad))
-        Console.WriteLine($"R{row}: O=[{o}] P=[{p}] AD=[{ad}]");
-}
-
-Console.WriteLine("LAATSTE");
-for (var row = 58; row <= 90; row++)
-{
-    var o = ws.Cell(row, 15).GetFormattedString().Trim();
-    var p = ws.Cell(row, 16).GetFormattedString().Trim();
-    var ad = ws.Cell(row, 30).GetFormattedString().Trim();
-    if (!string.IsNullOrWhiteSpace(o) || !string.IsNullOrWhiteSpace(p) || !string.IsNullOrWhiteSpace(ad))
-        Console.WriteLine($"R{row}: O=[{o}] P=[{p}] AD=[{ad}]");
-}
-
+Console.WriteLine("TRAFO_FORMULAS");
 var trafo = wb.Worksheet("Transformator");
-Console.WriteLine("TRAFO_A");
 for (var row = 1; row <= 83; row++)
+for (var col = 1; col <= 14; col++)
 {
-    var a = trafo.Cell(row, 1);
-    if (a.HasFormula) Console.WriteLine($"A{row}: {a.FormulaA1}");
+    var cell = trafo.Cell(row,col);
+    if (cell.HasFormula && cell.FormulaA1.Contains("(1)")) Console.WriteLine($"{cell.Address}={cell.FormulaA1}");
 }
