@@ -22,7 +22,8 @@ internal static class ExcelDirectionExporter
         if (directions.Count == 0)
             throw new InvalidOperationException("Sla eerst minimaal één richting op.");
 
-        using var workbook = OpenTemplateWorkbook();
+        using var templateStream = OpenEmbeddedTemplate();
+        using var workbook = new XLWorkbook(templateStream);
         ValidateTemplates(workbook);
 
         var cableTemplate = workbook.Worksheet(CableSheetName);
@@ -56,34 +57,6 @@ internal static class ExcelDirectionExporter
         WriteCounts(transformer, totals);
 
         workbook.SaveAs(outputPath);
-    }
-
-    private static XLWorkbook OpenTemplateWorkbook()
-    {
-        try
-        {
-            using var embedded = OpenEmbeddedTemplate();
-            return new XLWorkbook(embedded);
-        }
-        catch (Exception ex) when (ex is FileFormatException or InvalidDataException)
-        {
-            using var dialog = new OpenFileDialog
-            {
-                Filter = "Enexis Excel-template (*.xlsx)|*.xlsx",
-                Title = "Ingebouwd Excel-template is beschadigd - kies het originele Enexis-template",
-                CheckFileExists = true,
-                Multiselect = false
-            };
-
-            if (dialog.ShowDialog() != DialogResult.OK)
-            {
-                throw new OperationCanceledException(
-                    "Excel-export geannuleerd. Het ingebouwde template kon niet worden geopend en er is geen vervangend template gekozen.",
-                    ex);
-            }
-
-            return new XLWorkbook(dialog.FileName);
-        }
     }
 
     private static Stream OpenEmbeddedTemplate()
