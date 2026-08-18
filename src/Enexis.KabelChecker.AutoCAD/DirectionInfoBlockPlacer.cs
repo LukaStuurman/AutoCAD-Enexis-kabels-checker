@@ -53,7 +53,7 @@ public sealed class DirectionInfoCommands
             var message = DirectionInfoBlockPlacer.Place(direction);
             doc.Editor.WriteMessage($"\n{message}");
         }
-        catch (Exception ex)
+        catch (System.Exception ex)
         {
             doc.Editor.WriteMessage($"\nRichting-info kon niet worden geplaatst: {ex.Message}");
         }
@@ -127,7 +127,7 @@ internal static class DirectionInfoBlockPlacer
             Height = TextHeight,
             TextString = text,
             Layer = layerName,
-            Color = Color.FromColorIndex(ColorMethod.ByLayer, 256)
+            Color = Autodesk.AutoCAD.Colors.Color.FromColorIndex(ColorMethod.ByLayer, 256)
         };
 
         space.AppendEntity(entity);
