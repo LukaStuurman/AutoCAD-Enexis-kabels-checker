@@ -78,6 +78,12 @@ internal static class ExcelDirectionExporter
         // voorbeeldwaarden uit de aangeleverde Excel nooit in een export blijven staan.
         ClearLegacyCounts(cableTemplate, version);
         ClearLegacyCounts(transformer, version);
+        if (version == KaderVersion.K2024_1_0)
+        {
+            // In het 2024-bronbestand staat nog een voorbeeldwaarde 50 in G18 van
+            // Ontwerpstroom_trafo. Dit is een invoerveld en moet in iedere export leeg zijn.
+            transformer.Cell("G18").Clear(XLClearOptions.Contents);
+        }
         ClearControlCableLengths(evenredigTemplate, controlFirstRow, controlLastRow, LegacyControlLengthColumn);
         ClearControlCableLengths(lastHalfTemplate, controlFirstRow, controlLastRow, LegacyControlLengthColumn);
 
