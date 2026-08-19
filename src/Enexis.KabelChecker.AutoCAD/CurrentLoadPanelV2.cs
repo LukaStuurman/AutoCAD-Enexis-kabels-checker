@@ -9,6 +9,7 @@ internal sealed class CurrentLoadPanel : UserControl
     private static readonly CultureInfo DutchCulture = CultureInfo.GetCultureInfo("nl-NL");
 
     private readonly NumericUpDown _radiusMeters = new();
+    private readonly ComboBox _kaderVersion = new();
     private readonly DataGridView _grid = new();
     private readonly Label _total = new();
     private readonly Label _assessment = new();
@@ -28,7 +29,10 @@ internal sealed class CurrentLoadPanel : UserControl
     }
 
     public IReadOnlyList<CurrentLoadInput> GetCurrentLoads() =>
-        _rows.Select(x => new CurrentLoadInput(x.Amps, x.Count)).ToArray();
+        _rows
+            .Where(x => x.Amps > 0 && x.Count > 0)
+            .Select(x => new CurrentLoadInput(x.Amps, x.Count))
+            .ToArray();
 
     public void LoadCurrentLoads(IEnumerable<CurrentLoadInput> loads)
     {
@@ -77,9 +81,34 @@ internal sealed class CurrentLoadPanel : UserControl
             WrapContents = false,
             AutoSize = true
         };
+
+        var kader = new FlowLayoutPanel { AutoSize = true, WrapContents = false };
+        kader.Controls.Add(new Label
+        {
+            Text = "Kader versie:",
+            AutoSize = true,
+            Font = new Font(SystemFonts.MessageBoxFont.FontFamily, 9F, FontStyle.Bold),
+            Padding = new Padding(0, 5, 3, 0)
+        });
+        _kaderVersion.DropDownStyle = ComboBoxStyle.DropDownList;
+        _kaderVersion.Width = 220;
+        foreach (var definition in KaderVersions.All)
+            _kaderVersion.Items.Add(definition);
+        _kaderVersion.SelectedIndexChanged += (_, _) =>
+        {
+            if (_kaderVersion.SelectedItem is KaderVersionDefinition selected)
+            {
+                KaderVersionSelection.SetCurrent(selected.Version);
+                _details.Text = $"Kaderversie ingesteld op {selected.DisplayName}.";
+            }
+        };
+        _kaderVersion.SelectedItem = KaderVersions.Get(KaderVersionSelection.Current);
+        kader.Controls.Add(_kaderVersion);
+        actions.Controls.Add(kader);
+
         actions.Controls.Add(new Label
         {
-            Text = "Ontwerpstroom uit tekst",
+            Text = "Ontwerpstroom",
             AutoSize = true,
             Font = new Font(SystemFonts.MessageBoxFont.FontFamily, 9.5F, FontStyle.Bold)
         });
@@ -89,7 +118,7 @@ internal sealed class CurrentLoadPanel : UserControl
         brush.Click += (_, _) => SelectWithBrush();
         buttons.Controls.Add(brush);
         var manual = new Button { Text = "Handmatig", AutoSize = true };
-        manual.Click += (_, _) => SelectManually();
+        manual.Click += (_, _) => AddManualRow();
         buttons.Controls.Add(manual);
         var remove = new Button { Text = "Verwijder rij", AutoSize = true };
         remove.Click += (_, _) => RemoveSelectedRow();
@@ -108,7 +137,7 @@ internal sealed class CurrentLoadPanel : UserControl
         actions.Controls.Add(radius);
         actions.Controls.Add(new Label
         {
-            Text = "Unieke Excel-ontwerpstromen worden automatisch gekoppeld. Bij een dubbele waarde, zoals 4,1 A, kies je bij opslaan de verdeling over de woningtypen.",
+            Text = "Klik op Handmatig om zelf een ontwerpstroomrij toe te voegen. De gekozen kaderversie bepaalt daarna de Excel-ontwerpstromen en invoerrijen.",
             AutoSize = true,
             MaximumSize = new Size(300, 0)
         });
@@ -183,29 +212,24 @@ internal sealed class CurrentLoadPanel : UserControl
         RefreshAssessment(result.Message);
     }
 
-    private void SelectManually()
+    private void AddManualRow()
     {
-        var result = TextCurrentManualSelection.Read();
-        if (result.Cancelled)
+        var draftIndex = _rows.FindIndex(x => x.Amps <= 0);
+        if (draftIndex < 0)
         {
-            _details.Text = result.Message;
-            return;
+            _rows.Add(new LoadRow(0, 1));
+            draftIndex = _rows.Count - 1;
+            RefreshGrid();
         }
 
-        var skipped = 0;
-        foreach (var value in result.Values)
+        if (draftIndex >= 0 && draftIndex < _grid.Rows.Count)
         {
-            if (_selectedTextObjects.ContainsKey(value.ObjectId))
-            {
-                skipped++;
-                continue;
-            }
-            _selectedTextObjects[value.ObjectId] = value.Amps;
-            IncrementRow(value.Amps);
+            _grid.CurrentCell = _grid.Rows[draftIndex].Cells["Amps"];
+            _grid.Focus();
+            _grid.BeginEdit(true);
         }
-        NormalizeRows();
-        RefreshGrid();
-        RefreshAssessment(result.Message + (skipped > 0 ? $"{Environment.NewLine}{skipped} al geselecteerde tekstobject(en) overgeslagen." : string.Empty));
+
+        RefreshAssessment("Nieuwe handmatige rij toegevoegd. Vul de ontwerpstroom en het aantal in.");
     }
 
     private void RemoveSelectedRow()
@@ -229,10 +253,15 @@ internal sealed class CurrentLoadPanel : UserControl
             return;
         var name = _grid.Columns[e.ColumnIndex].Name;
         var text = Convert.ToString(e.FormattedValue);
-        if (name == "Amps" && !TryParsePositiveAmps(text, out _))
+        if (name == "Amps")
         {
-            e.Cancel = true;
-            _details.Text = "Ontwerpstroom moet een positief getal zijn.";
+            if (string.IsNullOrWhiteSpace(text) && e.RowIndex < _rows.Count && _rows[e.RowIndex].Amps <= 0)
+                return;
+            if (!TryParsePositiveAmps(text, out _))
+            {
+                e.Cancel = true;
+                _details.Text = "Ontwerpstroom moet een positief getal zijn.";
+            }
         }
         else if (name == "Count" && !TryParsePositiveCount(text, out _))
         {
@@ -249,7 +278,10 @@ internal sealed class CurrentLoadPanel : UserControl
         var name = _grid.Columns[e.ColumnIndex].Name;
         if (name == "Amps")
         {
-            if (!TryParsePositiveAmps(Convert.ToString(_grid.Rows[e.RowIndex].Cells["Amps"].Value), out var amps))
+            var text = Convert.ToString(_grid.Rows[e.RowIndex].Cells["Amps"].Value);
+            if (string.IsNullOrWhiteSpace(text) && row.Amps <= 0)
+                return;
+            if (!TryParsePositiveAmps(text, out var amps))
                 return;
             var old = row.Amps;
             row.Amps = amps;
@@ -311,31 +343,37 @@ internal sealed class CurrentLoadPanel : UserControl
         {
             _grid.Rows.Clear();
             foreach (var row in _rows)
-                _grid.Rows.Add(FormatAmps(row.Amps), row.Count.ToString(DutchCulture), FormatAmps(row.Amps * row.Count));
+            {
+                var ampsText = row.Amps > 0 ? FormatAmps(row.Amps) : string.Empty;
+                var subtotalText = row.Amps > 0 && row.Count > 0 ? FormatAmps(row.Amps * row.Count) : string.Empty;
+                _grid.Rows.Add(ampsText, row.Count.ToString(DutchCulture), subtotalText);
+            }
         }
         finally
         {
             _refreshing = false;
         }
-        var total = _rows.Sum(x => x.Amps * x.Count);
-        var count = _rows.Sum(x => x.Count);
+        var validRows = _rows.Where(x => x.Amps > 0 && x.Count > 0).ToArray();
+        var total = validRows.Sum(x => x.Amps * x.Count);
+        var count = validRows.Sum(x => x.Count);
         _total.Text = count == 0 ? "Totaal: 0 A" : $"Totaal: {FormatAmps(total)} A ({count}×)";
     }
 
     private void RefreshAssessment(string? message = null)
     {
-        var total = _rows.Sum(x => x.Amps * x.Count);
+        var validRows = _rows.Where(x => x.Amps > 0 && x.Count > 0).ToArray();
+        var total = validRows.Sum(x => x.Amps * x.Count);
         if (_calculation?.MaxDesignCurrentAmps is not int maxAllowed)
         {
             _assessment.ForeColor = SystemColors.ControlText;
-            _assessment.Text = _rows.Count == 0 ? "Ontwerpstroom: —" : $"Ontwerpstroom totaal: {FormatAmps(total)} A";
+            _assessment.Text = validRows.Length == 0 ? "Ontwerpstroom: —" : $"Ontwerpstroom totaal: {FormatAmps(total)} A";
             _details.Text = string.IsNullOrWhiteSpace(message) ? "Bereken de kabelrichting om de ontwerpstroom te toetsen." : message;
             return;
         }
 
         var fits = total <= maxAllowed + 1e-9;
         _assessment.ForeColor = fits ? Color.SeaGreen : Color.Firebrick;
-        _assessment.Text = _rows.Count == 0
+        _assessment.Text = validRows.Length == 0
             ? $"Maximaal toegestaan: {maxAllowed} A"
             : fits
                 ? $"PAST — {FormatAmps(total)} A ≤ {maxAllowed} A"

@@ -104,7 +104,7 @@ internal sealed class KabelCheckerForm : Form
         _editingLabel.Padding = new Padding(0, 5, 10, 0);
         panel.Controls.Add(_editingLabel);
 
-        panel.Controls.Add(new Label { Text = "Richtingnr.:", AutoSize = true, Padding = new Padding(5, 5, 2, 0) });
+        panel.Controls.Add(new Label { Text = "RichtingNR:", AutoSize = true, Padding = new Padding(5, 5, 2, 0) });
         _directionNumber.Minimum = 1;
         _directionNumber.Maximum = 12;
         _directionNumber.Value = 1;
@@ -117,9 +117,6 @@ internal sealed class KabelCheckerForm : Form
         _savedDirections.SelectedIndexChanged += (_, _) => LoadSelectedDirection();
         panel.Controls.Add(_savedDirections);
 
-        var load = new Button { Text = "Open richting", AutoSize = true };
-        load.Click += (_, _) => LoadSelectedDirection(force: true);
-        panel.Controls.Add(load);
         var fresh = new Button { Text = "Nieuwe richting", AutoSize = true };
         fresh.Click += (_, _) => StartNewDirection();
         panel.Controls.Add(fresh);
@@ -213,7 +210,7 @@ internal sealed class KabelCheckerForm : Form
     {
         if (presetLengths is null) return;
         foreach (var pair in presetLengths)
-            if (pair.Value > 0 && CableCatalog.TryGet(pair.Key, out _)) _segments.Add(new CableSegment(pair.Key, pair.Value));
+            if (pair.Value > 0 && CableCatalog.TryGet(pair.Key, out _)) _segments.Add(new CableSegment(pair.Key, RoundLengthMeters(pair.Value)));
         RefreshSegmentGrid();
     }
 
@@ -229,13 +226,14 @@ internal sealed class KabelCheckerForm : Form
         if (firstCableInNewDirection && picked.SuggestedDirectionNumber is int suggested)
             _directionNumber.Value = suggested;
 
-        _segments.Add(new CableSegment(selected.CableName, picked.LengthMeters));
+        var roundedLength = RoundLengthMeters(picked.LengthMeters);
+        _segments.Add(new CableSegment(selected.CableName, roundedLength));
         RefreshSegmentGrid();
         ResetResult();
         var directionMessage = firstCableInNewDirection && picked.SuggestedDirectionNumber is int detected
             ? $" Richtingnummer automatisch ingesteld op {detected} vanuit laag '{picked.LayerName}'."
             : string.Empty;
-        _message.Text = $"Toegevoegd: {selected.CableName} — {picked.LengthMeters:0.00} m.{directionMessage} {picked.Message}";
+        _message.Text = $"Toegevoegd: {selected.CableName} — {roundedLength:0.00} m.{directionMessage} {picked.Message}";
     }
 
     private void RemoveSelectedSegment()
@@ -267,7 +265,7 @@ internal sealed class KabelCheckerForm : Form
     {
         if (_refreshingGrid || e.RowIndex < 0 || e.RowIndex >= _segments.Count || e.ColumnIndex < 0 || _grid.Columns[e.ColumnIndex].Name != "Length") return;
         if (!TryParsePositiveLength(Convert.ToString(_grid.Rows[e.RowIndex].Cells["Length"].Value), out var length)) return;
-        _segments[e.RowIndex] = new CableSegment(_segments[e.RowIndex].CableName, length);
+        _segments[e.RowIndex] = new CableSegment(_segments[e.RowIndex].CableName, RoundLengthMeters(length));
         UpdateTotalLengthLabel();
         ResetResult();
     }
@@ -278,7 +276,7 @@ internal sealed class KabelCheckerForm : Form
         try
         {
             _grid.Rows.Clear();
-            for (var i = 0; i < _segments.Count; i++) _grid.Rows.Add(i + 1, _segments[i].CableName, _segments[i].LengthMeters);
+            for (var i = 0; i < _segments.Count; i++) _grid.Rows.Add(i + 1, _segments[i].CableName, _segments[i].LengthMeters.ToString("0.00", DutchCulture));
         }
         finally { _refreshingGrid = false; }
         UpdateTotalLengthLabel();
@@ -376,7 +374,7 @@ internal sealed class KabelCheckerForm : Form
         _editingLabel.Text = $"Richting {state.Number} bewerken";
         _profile.SelectedIndex = state.Profile == LoadProfile.Evenredig ? 0 : 1;
         _segments.Clear();
-        _segments.AddRange(state.Segments.Select(x => new CableSegment(x.CableName, x.LengthMeters)));
+        _segments.AddRange(state.Segments.Select(x => new CableSegment(x.CableName, RoundLengthMeters(x.LengthMeters))));
         RefreshSegmentGrid();
         _currentLoadPanel.LoadCurrentLoads(state.CurrentLoads);
         ResetResult();
@@ -439,6 +437,9 @@ internal sealed class KabelCheckerForm : Form
 
     private void UpdateTotalLengthLabel() =>
         _totalLengthLabel.Text = $"Totale kabellengte: {_segments.Sum(x => x.LengthMeters).ToString("0.00", DutchCulture)} m";
+
+    private static double RoundLengthMeters(double value) =>
+        Math.Round(value, 2, MidpointRounding.AwayFromZero);
 
     private static bool TryParsePositiveLength(string? text, out double value)
     {

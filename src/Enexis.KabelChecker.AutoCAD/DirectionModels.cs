@@ -52,7 +52,7 @@ internal sealed class DirectionStore
         var state = new DirectionState(
             number,
             profile,
-            segments.Select(x => new CableSegment(x.CableName, x.LengthMeters)).ToArray(),
+            segments.Select(x => new CableSegment(x.CableName, Math.Round(x.LengthMeters, 2, MidpointRounding.AwayFromZero))).ToArray(),
             currentLoads.Select(x => new CurrentLoadInput(x.Amps, x.Count)).ToArray(),
             excelLoads.Select(x => new ExcelMappedLoad(x.ExcelLoadKey, x.Amps, x.Count)).ToArray());
 

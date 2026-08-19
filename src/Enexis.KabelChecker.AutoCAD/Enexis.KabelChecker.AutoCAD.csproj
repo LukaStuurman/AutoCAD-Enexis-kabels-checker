@@ -19,7 +19,9 @@
   </ItemGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="Resources\Eea-0205.K 1.0 - Copy.xlsx" />
     <EmbeddedResource Include="Resources\Eea-0205.K_2.0.xlsx" />
+    <EmbeddedResource Include="Resources\Eea-0205.K 3.2.xlsx" />
     <Compile Remove="CurrentLoadPanel.cs" />
     <Compile Remove="KabelCheckerForm.cs" />
   </ItemGroup>

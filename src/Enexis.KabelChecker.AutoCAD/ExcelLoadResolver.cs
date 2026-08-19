@@ -7,18 +7,28 @@ internal static class ExcelLoadResolver
         IReadOnlyList<CurrentLoadInput> currentLoads,
         IReadOnlyList<ExcelMappedLoad>? existing = null)
     {
+        var version = KaderVersionSelection.EnsureSelected(owner);
+        return Resolve(owner, currentLoads, version, existing);
+    }
+
+    public static IReadOnlyList<ExcelMappedLoad>? Resolve(
+        IWin32Window? owner,
+        IReadOnlyList<CurrentLoadInput> currentLoads,
+        KaderVersion version,
+        IReadOnlyList<ExcelMappedLoad>? existing = null)
+    {
         var resolved = new List<ExcelMappedLoad>();
 
         foreach (var load in currentLoads)
         {
-            var matches = ExcelLoadCatalog.FindByAmps(load.Amps);
+            var matches = ExcelLoadCatalog.FindByAmps(version, load.Amps);
             if (matches.Count == 0)
             {
-                MessageBox.Show(
+                var versionName = KaderVersions.Get(version).DisplayName;
+                ShowMessage(
                     owner,
-                    $"Ontwerpstroom {load.Amps:0.##} A komt niet voor in de kolom 'Ontwerpstroom verbruik per eenheid' van Ontwerpstroom_kabel.",
+                    $"Ontwerpstroom {load.Amps:0.##} A komt niet voor in de invoertabel van {versionName}.",
                     "Geen Excel-koppeling",
-                    MessageBoxButtons.OK,
                     MessageBoxIcon.Warning);
                 return null;
             }
@@ -38,14 +48,23 @@ internal static class ExcelLoadResolver
                 continue;
             }
 
-            using var dialog = new ExcelLoadDistributionDialog(load, matches);
-            if (dialog.ShowDialog(owner) != DialogResult.OK)
+            using var dialog = new ExcelLoadDistributionDialog(load, matches, KaderVersions.Get(version).DisplayName);
+            var result = owner is null ? dialog.ShowDialog() : dialog.ShowDialog(owner);
+            if (result != DialogResult.OK)
                 return null;
 
             resolved.AddRange(dialog.Result);
         }
 
         return resolved;
+    }
+
+    private static void ShowMessage(IWin32Window? owner, string text, string title, MessageBoxIcon icon)
+    {
+        if (owner is null)
+            MessageBox.Show(text, title, MessageBoxButtons.OK, icon);
+        else
+            MessageBox.Show(owner, text, title, MessageBoxButtons.OK, icon);
     }
 }
 
@@ -57,11 +76,11 @@ internal sealed class ExcelLoadDistributionDialog : Form
 
     public IReadOnlyList<ExcelMappedLoad> Result { get; private set; } = Array.Empty<ExcelMappedLoad>();
 
-    public ExcelLoadDistributionDialog(CurrentLoadInput load, IReadOnlyList<ExcelLoadOption> options)
+    public ExcelLoadDistributionDialog(CurrentLoadInput load, IReadOnlyList<ExcelLoadOption> options, string? versionName = null)
     {
         _load = load;
         _options = options;
-        Text = $"Verdeel {load.Count} × {load.Amps:0.##} A over woningtypen";
+        Text = $"Verdeel {load.Count} × {load.Amps:0.##} A";
         StartPosition = FormStartPosition.CenterParent;
         AutoSize = true;
         AutoSizeMode = AutoSizeMode.GrowAndShrink;
@@ -82,8 +101,8 @@ internal sealed class ExcelLoadDistributionDialog : Form
         var intro = new Label
         {
             AutoSize = true,
-            MaximumSize = new Size(520, 0),
-            Text = $"{load.Amps:0.##} A komt meerdere keren in de Excel voor. Verdeel het totale aantal {load.Count} over de juiste typen."
+            MaximumSize = new Size(720, 0),
+            Text = $"{load.Amps:0.##} A komt meerdere keren voor{(string.IsNullOrWhiteSpace(versionName) ? string.Empty : $" in {versionName}")}. Verdeel het totale aantal {load.Count} over de juiste invoerrijen."
         };
         root.Controls.Add(intro, 0, 0);
         root.SetColumnSpan(intro, 2);
@@ -93,6 +112,7 @@ internal sealed class ExcelLoadDistributionDialog : Form
             root.Controls.Add(new Label
             {
                 AutoSize = true,
+                MaximumSize = new Size(620, 0),
                 Text = options[i].DisplayName,
                 Padding = new Padding(0, 6, 10, 0)
             }, 0, i + 1);
