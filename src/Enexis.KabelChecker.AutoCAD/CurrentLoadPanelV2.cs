@@ -31,8 +31,20 @@ internal sealed class CurrentLoadPanel : UserControl
     public IReadOnlyList<CurrentLoadInput> GetCurrentLoads() =>
         _rows
             .Where(x => x.Amps > 0 && x.Count > 0)
-            .Select(x => new CurrentLoadInput(x.Amps, x.Count))
+            .GroupBy(x => x.Amps)
+            .Select(x => new CurrentLoadInput(x.Key, x.Sum(y => y.Count)))
+            .OrderBy(x => x.Amps)
             .ToArray();
+
+    public void CommitPendingEdit() => _grid.EndEdit();
+
+    public void SetKaderVersion(KaderVersion version)
+    {
+        KaderVersionSelection.SetCurrent(version);
+        var definition = KaderVersions.Get(version);
+        if (!Equals(_kaderVersion.SelectedItem, definition))
+            _kaderVersion.SelectedItem = definition;
+    }
 
     public void LoadCurrentLoads(IEnumerable<CurrentLoadInput> loads)
     {
@@ -137,7 +149,7 @@ internal sealed class CurrentLoadPanel : UserControl
         actions.Controls.Add(radius);
         actions.Controls.Add(new Label
         {
-            Text = "Klik op Handmatig om zelf een ontwerpstroomrij toe te voegen. De gekozen kaderversie bepaalt daarna de Excel-ontwerpstromen en invoerrijen.",
+            Text = "Klik op Handmatig om zelf een ontwerpstroomrij toe te voegen. Alle ontwerpstromen en aantallen in de tabel zijn daarna vrij aanpasbaar.",
             AutoSize = true,
             MaximumSize = new Size(300, 0)
         });
@@ -274,6 +286,7 @@ internal sealed class CurrentLoadPanel : UserControl
     {
         if (_refreshing || e.RowIndex < 0 || e.RowIndex >= _rows.Count || e.ColumnIndex < 0)
             return;
+
         var row = _rows[e.RowIndex];
         var name = _grid.Columns[e.ColumnIndex].Name;
         if (name == "Amps")
@@ -283,6 +296,7 @@ internal sealed class CurrentLoadPanel : UserControl
                 return;
             if (!TryParsePositiveAmps(text, out var amps))
                 return;
+
             var old = row.Amps;
             row.Amps = amps;
             foreach (var id in _selectedTextObjects.Where(x => SameAmps(x.Value, old)).Select(x => x.Key).ToArray())
@@ -292,6 +306,7 @@ internal sealed class CurrentLoadPanel : UserControl
         {
             if (!TryParsePositiveCount(Convert.ToString(_grid.Rows[e.RowIndex].Cells["Count"].Value), out var count))
                 return;
+
             row.Count = count;
             var tracked = _selectedTextObjects.Where(x => SameAmps(x.Value, row.Amps)).Select(x => x.Key).ToArray();
             foreach (var id in tracked.Skip(count))
@@ -302,21 +317,32 @@ internal sealed class CurrentLoadPanel : UserControl
             return;
         }
 
-        // CellEndEdit wordt door DataGridView aangeroepen terwijl de actieve cel nog
-        // wordt omgeschakeld. RefreshGrid() wist alle rijen en mag daarom niet binnen
-        // diezelfde SetCurrentCellAddressCore-aanroep gebeuren. Stel de normalisatie en
-        // volledige grid-refresh uit tot de huidige Windows Forms UI-cyclus klaar is.
-        if (IsHandleCreated && !IsDisposed)
-        {
-            BeginInvoke(new Action(() =>
-            {
-                if (IsDisposed)
-                    return;
+        // Bouw de DataGridView hier bewust niet opnieuw op. Rows.Clear() zou de huidige
+        // cel terugzetten naar linksboven en maakt navigeren naar andere rijen/kolommen
+        // onmogelijk. Alleen de bewerkte rij en totalen worden bijgewerkt.
+        UpdateRowDisplay(e.RowIndex);
+        UpdateTotal();
+        RefreshAssessment("Ontwerpstroomtabel aangepast.");
+    }
 
-                NormalizeRows();
-                RefreshGrid();
-                RefreshAssessment("Ontwerpstroomtabel aangepast.");
-            }));
+    private void UpdateRowDisplay(int rowIndex)
+    {
+        if (rowIndex < 0 || rowIndex >= _rows.Count || rowIndex >= _grid.Rows.Count)
+            return;
+
+        var row = _rows[rowIndex];
+        _refreshing = true;
+        try
+        {
+            _grid.Rows[rowIndex].Cells["Amps"].Value = row.Amps > 0 ? FormatAmps(row.Amps) : string.Empty;
+            _grid.Rows[rowIndex].Cells["Count"].Value = row.Count.ToString(DutchCulture);
+            _grid.Rows[rowIndex].Cells["Subtotal"].Value = row.Amps > 0 && row.Count > 0
+                ? FormatAmps(row.Amps * row.Count)
+                : string.Empty;
+        }
+        finally
+        {
+            _refreshing = false;
         }
     }
 
@@ -367,6 +393,11 @@ internal sealed class CurrentLoadPanel : UserControl
         {
             _refreshing = false;
         }
+        UpdateTotal();
+    }
+
+    private void UpdateTotal()
+    {
         var validRows = _rows.Where(x => x.Amps > 0 && x.Count > 0).ToArray();
         var total = validRows.Sum(x => x.Amps * x.Count);
         var count = validRows.Sum(x => x.Count);

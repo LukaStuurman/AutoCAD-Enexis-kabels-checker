@@ -9,6 +9,9 @@ internal sealed class KabelCheckerForm : Form
 
     private readonly KabelCheckerEngine _engine = new();
     private readonly DirectionStore _store = DirectionStore.Instance;
+    private readonly StationPersistence _stations = StationPersistence.Instance;
+    private readonly TextBox _stationName = new();
+    private readonly ComboBox _savedStations = new();
     private readonly ComboBox _profile = new();
     private readonly ComboBox _cablePicker = new();
     private readonly DataGridView _grid = new();
@@ -22,15 +25,16 @@ internal sealed class KabelCheckerForm : Form
     private readonly List<CableSegment> _segments = new();
     private bool _refreshingGrid;
     private bool _refreshingDirections;
+    private bool _refreshingStations;
     private int? _editingDirectionNumber;
 
     public KabelCheckerForm(IReadOnlyDictionary<string, double>? presetLengths = null, string? message = null)
     {
         Text = "Enexis kabel checker — richtingen & Excel export";
         StartPosition = FormStartPosition.CenterScreen;
-        Width = 980;
-        Height = 780;
-        MinimumSize = new Size(860, 680);
+        Width = 1000;
+        Height = 830;
+        MinimumSize = new Size(880, 720);
         AutoScaleMode = AutoScaleMode.Dpi;
         Font = new Font("Segoe UI", 8.75F);
 
@@ -39,23 +43,26 @@ internal sealed class KabelCheckerForm : Form
         LoadPresetSegments(presetLengths);
         _directionNumber.Value = _store.FirstAvailableNumber();
         RefreshSavedDirections();
-        _message.Text = message ?? "Bouw een richting op, lees ontwerpstroom uit tekst en sla de richting op. Het richtingsnummer wordt bij de eerste kabel automatisch uit bijvoorbeeld K02/K12 gehaald en kan vóór opslaan worden aangepast.";
+        RefreshSavedStations();
+        _message.Text = message ?? "Vul bovenaan een stationsnaam in. Bouw daarna één of meer richtingen op, voeg per richting ontwerpstroom toe en sla de richtingen of het volledige station op.";
     }
 
     private void BuildUi()
     {
-        var root = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(8), ColumnCount = 1, RowCount = 8 };
+        var root = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(8), ColumnCount = 1, RowCount = 9 };
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        root.RowStyles.Add(new RowStyle(SizeType.Percent, 45));
+        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        root.RowStyles.Add(new RowStyle(SizeType.Percent, 43));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        root.RowStyles.Add(new RowStyle(SizeType.Percent, 55));
+        root.RowStyles.Add(new RowStyle(SizeType.Percent, 57));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
-        root.Controls.Add(BuildDirectionManager(), 0, 0);
-        root.Controls.Add(BuildCableActions(), 0, 1);
+        root.Controls.Add(BuildStationManager(), 0, 0);
+        root.Controls.Add(BuildDirectionManager(), 0, 1);
+        root.Controls.Add(BuildCableActions(), 0, 2);
 
         ConfigureGrid();
         var gridPanel = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2 };
@@ -66,12 +73,12 @@ internal sealed class KabelCheckerForm : Form
         _totalLengthLabel.Font = new Font(Font.FontFamily, 9.5F, FontStyle.Bold);
         _totalLengthLabel.Anchor = AnchorStyles.Right;
         gridPanel.Controls.Add(_totalLengthLabel, 0, 1);
-        root.Controls.Add(gridPanel, 0, 2);
+        root.Controls.Add(gridPanel, 0, 3);
 
         _message.AutoSize = true;
-        _message.MaximumSize = new Size(930, 0);
+        _message.MaximumSize = new Size(950, 0);
         _message.Padding = new Padding(1, 4, 1, 4);
-        root.Controls.Add(_message, 0, 3);
+        root.Controls.Add(_message, 0, 4);
 
         var fusePanel = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, BorderStyle = BorderStyle.FixedSingle, Padding = new Padding(6) };
         fusePanel.Controls.Add(new Label { Text = "Hoogste toegestane zekering:", AutoSize = true, Font = new Font(Font.FontFamily, 10F, FontStyle.Bold), Padding = new Padding(0, 6, 8, 0) });
@@ -79,20 +86,58 @@ internal sealed class KabelCheckerForm : Form
         _fuseResult.AutoSize = true;
         _fuseResult.Font = new Font(SystemFonts.MessageBoxFont.FontFamily, 14F, FontStyle.Bold);
         fusePanel.Controls.Add(_fuseResult);
-        root.Controls.Add(fusePanel, 0, 4);
+        root.Controls.Add(fusePanel, 0, 5);
 
-        root.Controls.Add(_currentLoadPanel, 0, 5);
-        root.Controls.Add(BuildFooter(), 0, 6);
+        root.Controls.Add(_currentLoadPanel, 0, 6);
+        root.Controls.Add(BuildFooter(), 0, 7);
 
         var hint = new Label
         {
             AutoSize = true,
             ForeColor = SystemColors.GrayText,
-            Text = "Excel-export: per opgeslagen richting een tab 'Ontwerpstroom_kabel R#'; 'Ontwerpstroom_trafo' bevat de opgetelde aantallen van alle richtingen."
+            Text = "Station opslaan bewaart alle richtingen inclusief kabels, profiel, ontwerpstroom, aantallen, Excel-mapping en kaderversie. Excel-export gebruikt de huidige opgeslagen richtingen."
         };
-        root.Controls.Add(hint, 0, 7);
+        root.Controls.Add(hint, 0, 8);
         Controls.Add(root);
         UpdateTotalLengthLabel();
+    }
+
+    private Control BuildStationManager()
+    {
+        var panel = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, WrapContents = true, BorderStyle = BorderStyle.FixedSingle, Padding = new Padding(6) };
+        panel.Controls.Add(new Label
+        {
+            Text = "Stationsnaam:",
+            AutoSize = true,
+            Font = new Font(Font.FontFamily, 10F, FontStyle.Bold),
+            Padding = new Padding(0, 5, 3, 0)
+        });
+
+        _stationName.Width = 220;
+        panel.Controls.Add(_stationName);
+
+        panel.Controls.Add(new Label { Text = "Opgeslagen stations:", AutoSize = true, Padding = new Padding(10, 5, 3, 0) });
+        _savedStations.DropDownStyle = ComboBoxStyle.DropDownList;
+        _savedStations.Width = 220;
+        _savedStations.SelectedIndexChanged += (_, _) =>
+        {
+            if (_refreshingStations)
+                return;
+            if (_savedStations.SelectedItem is string selected)
+                _stationName.Text = selected;
+        };
+        panel.Controls.Add(_savedStations);
+
+        var save = new Button { Text = "Station opslaan", AutoSize = true };
+        save.Click += (_, _) => SaveStation();
+        panel.Controls.Add(save);
+        var load = new Button { Text = "Station laden", AutoSize = true };
+        load.Click += (_, _) => LoadStation();
+        panel.Controls.Add(load);
+        var delete = new Button { Text = "Station verwijderen", AutoSize = true };
+        delete.Click += (_, _) => DeleteStation();
+        panel.Controls.Add(delete);
+        return panel;
     }
 
     private Control BuildDirectionManager()
@@ -287,6 +332,7 @@ internal sealed class KabelCheckerForm : Form
         try
         {
             _grid.EndEdit();
+            _currentLoadPanel.CommitPendingEdit();
             var result = _engine.Calculate(_segments, ((ProfileItem)_profile.SelectedItem!).Profile);
             _fuseResult.Text = result.MaximumAllowed is null ? "Geen gG toegestaan" : $"{result.FuseAmps} A gG";
             _currentLoadPanel.SetCalculation(result);
@@ -298,11 +344,14 @@ internal sealed class KabelCheckerForm : Form
         }
     }
 
-    private void SaveDirection()
+    private void SaveDirection() => SaveDirectionCore(true);
+
+    private bool SaveDirectionCore(bool showSuccessMessage)
     {
         try
         {
             _grid.EndEdit();
+            _currentLoadPanel.CommitPendingEdit();
             var selectedDirectionNumber = Decimal.ToInt32(_directionNumber.Value);
             var profile = ((ProfileItem)_profile.SelectedItem!).Profile;
             var calculation = _engine.Calculate(_segments, profile);
@@ -311,23 +360,146 @@ internal sealed class KabelCheckerForm : Form
             if (currentLoads.Count == 0)
             {
                 MessageBox.Show(this, "Voeg eerst ontwerpstroom toe.", "Ontwerpstroom ontbreekt", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                return;
+                return false;
             }
 
             var existing = _editingDirectionNumber is int number ? _store.Get(number)?.ExcelLoads : null;
             var mapped = ExcelLoadResolver.Resolve(this, currentLoads, existing);
-            if (mapped is null) return;
+            if (mapped is null) return false;
 
             var saved = _store.Save(selectedDirectionNumber, _editingDirectionNumber, profile, _segments, currentLoads, mapped);
             _editingDirectionNumber = saved.Number;
             _directionNumber.Value = saved.Number;
             _editingLabel.Text = $"Richting {saved.Number} bewerken";
             RefreshSavedDirections(saved.Number);
-            _message.Text = $"Richting {saved.Number} opgeslagen. Het nummer kan later bij openen worden gewijzigd (1 t/m 12).";
+            if (showSuccessMessage)
+                _message.Text = $"Richting {saved.Number} opgeslagen. Het nummer kan later bij openen worden gewijzigd (1 t/m 12).";
+            return true;
         }
         catch (Exception ex)
         {
             MessageBox.Show(this, ex.Message, "Richting niet opgeslagen", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return false;
+        }
+    }
+
+    private void SaveStation()
+    {
+        try
+        {
+            _currentLoadPanel.CommitPendingEdit();
+            var hasCurrentEditorInput = _segments.Count > 0 || _currentLoadPanel.GetCurrentLoads().Count > 0;
+            if (hasCurrentEditorInput && !SaveDirectionCore(false))
+                return;
+
+            var name = _stationName.Text.Trim();
+            var replaced = _stations.Save(name, KaderVersionSelection.Current, _store.Directions);
+            _stationName.Text = name;
+            RefreshSavedStations(name);
+            _message.Text = replaced
+                ? $"Station '{name}' bijgewerkt met {_store.Directions.Count} richting(en), inclusief ontwerpstroom per richting."
+                : $"Station '{name}' opgeslagen met {_store.Directions.Count} richting(en), inclusief ontwerpstroom per richting.";
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, ex.Message, "Station niet opgeslagen", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+    }
+
+    private void LoadStation()
+    {
+        try
+        {
+            var name = SelectedStationName;
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                MessageBox.Show(this, "Kies een opgeslagen station of vul de stationsnaam in.", "Geen station gekozen", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            var station = _stations.Load(name);
+            if (station is null)
+            {
+                MessageBox.Show(this, $"Station '{name}' is niet gevonden.", "Station niet gevonden", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            _stations.ReplaceCurrentDirections(_store, station.Directions);
+            _currentLoadPanel.SetKaderVersion(station.KaderVersion);
+            _stationName.Text = station.Name;
+            RefreshSavedStations(station.Name);
+
+            if (station.Directions.Count > 0)
+            {
+                var first = station.Directions.OrderBy(x => x.Number).First().Number;
+                RefreshSavedDirections(first);
+                LoadSelectedDirection(true);
+            }
+            else
+            {
+                StartNewDirection();
+                RefreshSavedDirections();
+            }
+
+            _message.Text = $"Station '{station.Name}' geladen met {station.Directions.Count} richting(en), inclusief ontwerpstroom per richting.";
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, ex.Message, "Station kon niet worden geladen", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    private void DeleteStation()
+    {
+        try
+        {
+            var name = SelectedStationName;
+            if (string.IsNullOrWhiteSpace(name))
+                return;
+            if (MessageBox.Show(this, $"Opgeslagen station '{name}' verwijderen?", "Station verwijderen", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
+                return;
+
+            if (_stations.Delete(name))
+            {
+                RefreshSavedStations();
+                _stationName.Clear();
+                _message.Text = $"Opgeslagen station '{name}' verwijderd.";
+            }
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, ex.Message, "Station kon niet worden verwijderd", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    private void RefreshSavedStations(string? selectName = null)
+    {
+        try
+        {
+            _refreshingStations = true;
+            _savedStations.Items.Clear();
+            foreach (var name in _stations.Names)
+                _savedStations.Items.Add(name);
+
+            if (!string.IsNullOrWhiteSpace(selectName))
+            {
+                for (var i = 0; i < _savedStations.Items.Count; i++)
+                {
+                    if (string.Equals(Convert.ToString(_savedStations.Items[i]), selectName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        _savedStations.SelectedIndex = i;
+                        break;
+                    }
+                }
+            }
+            else
+            {
+                _savedStations.SelectedIndex = -1;
+            }
+        }
+        finally
+        {
+            _refreshingStations = false;
         }
     }
 
@@ -378,7 +550,7 @@ internal sealed class KabelCheckerForm : Form
         RefreshSegmentGrid();
         _currentLoadPanel.LoadCurrentLoads(state.CurrentLoads);
         ResetResult();
-        _message.Text = $"Richting {state.Number} geladen. Het nummer bovenaan kan vóór opslaan worden gewijzigd.";
+        _message.Text = $"Richting {state.Number} geladen. Ontwerpstromen en aantallen kunnen direct in de tabel worden aangepast.";
     }
 
     private void RefreshSavedDirections(int? selectNumber = null)
@@ -428,6 +600,11 @@ internal sealed class KabelCheckerForm : Form
     }
 
     private int? SelectedDirectionNumber => _savedDirections.SelectedItem is DirectionItem item ? item.Number : null;
+
+    private string? SelectedStationName =>
+        _savedStations.SelectedItem is string selected && !string.IsNullOrWhiteSpace(selected)
+            ? selected
+            : string.IsNullOrWhiteSpace(_stationName.Text) ? null : _stationName.Text.Trim();
 
     private void ResetResult()
     {
