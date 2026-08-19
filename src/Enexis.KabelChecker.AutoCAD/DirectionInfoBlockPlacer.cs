@@ -63,7 +63,8 @@ public sealed class DirectionInfoCommands
 internal static class DirectionInfoBlockPlacer
 {
     private const double TextHeight = 1.0;
-    private const double LineSpacing = 1.2;
+    private const double LineSpacing = 1.1150990076130256;
+    private const string TextStyleName = "ARIAL";
     private static readonly CultureInfo DutchCulture = CultureInfo.GetCultureInfo("nl-NL");
 
     public static string Place(DirectionState direction)
@@ -86,11 +87,13 @@ internal static class DirectionInfoBlockPlacer
         if (!layerTable.Has(layerName))
         {
             throw new InvalidOperationException(
-                $"Laag '{layerName}' bestaat niet in deze tekening. Het richting-infoblok gebruikt bewust alleen de bestaande richtingslaag zodat kleur en laageigenschappen kloppen.");
+                $"Laag '{layerName}' bestaat niet in deze tekening. De richting-info gebruikt bewust alleen de bestaande richtingslaag zodat kleur en laageigenschappen kloppen.");
         }
 
+        var textStyleId = GetOrCreateArialTextStyle(database, transaction);
+
         var pointOptions = new PromptPointOptions(
-            $"\nKies invoegpunt voor richting-info K{direction.Number:00}: ");
+            $"\nKies middelpunt van de bovenste richting-info tekst K{direction.Number:00}: ");
         var pointResult = editor.GetPoint(pointOptions);
         if (pointResult.Status != PromptStatus.OK)
             return "Plaatsen van richting-info geannuleerd.";
@@ -98,15 +101,16 @@ internal static class DirectionInfoBlockPlacer
         var totalCurrent = direction.CurrentLoads.Sum(x => x.Amps * x.Count);
         var totalLength = direction.Segments.Sum(x => x.LengthMeters);
 
-        var currentText = $"Ontwerpstroom: {totalCurrent.ToString("0.##", DutchCulture)} A";
-        var lengthText = $"Totale lengte: {totalLength.ToString("0.00", DutchCulture)} m";
+        // Exact hetzelfde tekstformaat als het aangeleverde DXF-voorbeeld.
+        var currentText = $"{totalCurrent.ToString("0.##", DutchCulture)}Amp.";
+        var lengthText = $"{totalLength.ToString("0.00", DutchCulture)}Met.";
 
         var currentSpace = (BlockTableRecord)transaction.GetObject(database.CurrentSpaceId, OpenMode.ForWrite);
-        var topPoint = pointResult.Value;
-        var bottomPoint = new Point3d(topPoint.X, topPoint.Y - (TextHeight * LineSpacing), topPoint.Z);
+        var topCenter = pointResult.Value;
+        var bottomCenter = new Point3d(topCenter.X, topCenter.Y - LineSpacing, topCenter.Z);
 
-        AppendText(currentSpace, transaction, currentText, topPoint, layerName);
-        AppendText(currentSpace, transaction, lengthText, bottomPoint, layerName);
+        AppendCenteredText(currentSpace, transaction, database, currentText, topCenter, layerName, textStyleId);
+        AppendCenteredText(currentSpace, transaction, database, lengthText, bottomCenter, layerName, textStyleId);
 
         transaction.Commit();
         editor.Regen();
@@ -114,23 +118,47 @@ internal static class DirectionInfoBlockPlacer
         return $"Richting-info K{direction.Number:00} geplaatst op laag '{layerName}'.";
     }
 
-    private static void AppendText(
+    private static ObjectId GetOrCreateArialTextStyle(Database database, Transaction transaction)
+    {
+        var textStyleTable = (TextStyleTable)transaction.GetObject(database.TextStyleTableId, OpenMode.ForRead);
+        if (textStyleTable.Has(TextStyleName))
+            return textStyleTable[TextStyleName];
+
+        textStyleTable.UpgradeOpen();
+        var style = new TextStyleTableRecord
+        {
+            Name = TextStyleName,
+            FileName = "arial.ttf"
+        };
+        var styleId = textStyleTable.Add(style);
+        transaction.AddNewlyCreatedDBObject(style, true);
+        return styleId;
+    }
+
+    private static void AppendCenteredText(
         BlockTableRecord space,
         Transaction transaction,
+        Database database,
         string text,
-        Point3d position,
-        string layerName)
+        Point3d center,
+        string layerName,
+        ObjectId textStyleId)
     {
         var entity = new DBText
         {
-            Position = position,
+            Position = center,
+            AlignmentPoint = center,
             Height = TextHeight,
             TextString = text,
+            TextStyleId = textStyleId,
+            HorizontalMode = TextHorizontalMode.TextCenter,
+            VerticalMode = TextVerticalMode.TextVerticalMid,
             Layer = layerName,
             Color = Autodesk.AutoCAD.Colors.Color.FromColorIndex(ColorMethod.ByLayer, 256)
         };
 
         space.AppendEntity(entity);
         transaction.AddNewlyCreatedDBObject(entity, true);
+        entity.AdjustAlignment(database);
     }
 }
