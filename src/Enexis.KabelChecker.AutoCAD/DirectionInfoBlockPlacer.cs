@@ -146,13 +146,13 @@ internal static class DirectionInfoBlockPlacer
     {
         var entity = new DBText
         {
-            Position = center,
-            AlignmentPoint = center,
             Height = TextHeight,
             TextString = text,
             TextStyleId = textStyleId,
             HorizontalMode = TextHorizontalMode.TextCenter,
             VerticalMode = TextVerticalMode.TextVerticalMid,
+            Position = center,
+            AlignmentPoint = center,
             Layer = layerName,
             Color = Autodesk.AutoCAD.Colors.Color.FromColorIndex(ColorMethod.ByLayer, 256)
         };
