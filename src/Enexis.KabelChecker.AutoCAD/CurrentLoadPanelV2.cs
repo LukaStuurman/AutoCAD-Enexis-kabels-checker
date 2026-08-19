@@ -301,9 +301,23 @@ internal sealed class CurrentLoadPanel : UserControl
         {
             return;
         }
-        NormalizeRows();
-        RefreshGrid();
-        RefreshAssessment("Ontwerpstroomtabel aangepast.");
+
+        // CellEndEdit wordt door DataGridView aangeroepen terwijl de actieve cel nog
+        // wordt omgeschakeld. RefreshGrid() wist alle rijen en mag daarom niet binnen
+        // diezelfde SetCurrentCellAddressCore-aanroep gebeuren. Stel de normalisatie en
+        // volledige grid-refresh uit tot de huidige Windows Forms UI-cyclus klaar is.
+        if (IsHandleCreated && !IsDisposed)
+        {
+            BeginInvoke(new Action(() =>
+            {
+                if (IsDisposed)
+                    return;
+
+                NormalizeRows();
+                RefreshGrid();
+                RefreshAssessment("Ontwerpstroomtabel aangepast.");
+            }));
+        }
     }
 
     private void IncrementRow(double amps)
