@@ -22,3 +22,13 @@ jobs:
 
       - name: Build AutoCAD plugin including Excel export
         run: dotnet build src/Enexis.KabelChecker.AutoCAD/Enexis.KabelChecker.AutoCAD.csproj -c Release -p:UseAutoCADNuGet=true
+
+      - name: Verify required .NET runtime dependency packaging
+        shell: pwsh
+        run: |
+          $target = Join-Path $env:RUNNER_TEMP 'EnexisRuntimeDependencyCheck'
+          if (Test-Path $target) { Remove-Item $target -Recurse -Force }
+          & 'build\CopyDotNetRuntimeDependencies.ps1' -Destination $target
+          if (-not (Test-Path (Join-Path $target 'System.IO.Compression.Brotli.dll'))) {
+            throw 'System.IO.Compression.Brotli.dll kon niet voor de bundle worden verpakt.'
+          }
