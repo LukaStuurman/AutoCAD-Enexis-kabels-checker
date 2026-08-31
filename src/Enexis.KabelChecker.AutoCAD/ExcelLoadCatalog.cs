@@ -1,6 +1,3 @@
-using System.Globalization;
-using ClosedXML.Excel;
-
 namespace Enexis.KabelChecker.AutoCAD;
 
 internal sealed record ExcelLoadOption(
@@ -11,8 +8,6 @@ internal sealed record ExcelLoadOption(
 
 internal static class ExcelLoadCatalog
 {
-    private const string K2026ResourceFileName = "Eea-0205.K 3.2.xlsx";
-
     private static readonly IReadOnlyList<ExcelLoadOption> K2024 = new[]
     {
         new ExcelLoadOption("T1_VRIJSTAAND", "Type 1 — Vrijstaand", 5, 10.3),
@@ -57,18 +52,22 @@ internal static class ExcelLoadCatalog
         new ExcelLoadOption("T9_3X63_80A", "Type 9 — Straatmeubilair 3x63A t/m 3x80A", 43, 36.0)
     };
 
-    private static readonly IReadOnlyList<ExcelLoadOption> K2026Base = new[]
+    // Kader 3.2 (2026): vaste ontwerpstroom per eenheid voor de plugin.
+    // Waar 'Ontwerpstroom opwek per eenheid' hoger is dan afname, staat hier
+    // bewust de hoogste van beide waarden. Hierdoor hoeft AutoCAD het Excel-
+    // template niet tijdens gebruik te openen of via ClosedXML te interpreteren.
+    private static readonly IReadOnlyList<ExcelLoadOption> K2026 = new[]
     {
-        new ExcelLoadOption("V32_T1_VRIJSTAAND", "Type 1 — Vrijstaand (t/m 2021, individuele warmtepomp)", 5, 8.1),
+        new ExcelLoadOption("V32_T1_VRIJSTAAND", "Type 1 — Vrijstaand (t/m 2021, individuele warmtepomp)", 5, 9.2),
         new ExcelLoadOption("V32_T1_TWEE_ONDER_EEN_KAP", "Type 1 — Twee onder een kap (t/m 2021, individuele warmtepomp)", 6, 7.1),
         new ExcelLoadOption("V32_T1_RIJTJESWONING", "Type 1 — Rijtjeswoning (t/m 2021, individuele warmtepomp)", 7, 6.4),
         new ExcelLoadOption("V32_T1_ONBEKEND", "Type 1 — Onbekend (t/m 2021, individuele warmtepomp)", 8, 6.8),
-        new ExcelLoadOption("V32_T2_VRIJSTAAND", "Type 2 — Vrijstaand (stads-/gasverwarming)", 11, 3.9),
-        new ExcelLoadOption("V32_T2_TWEE_ONDER_EEN_KAP", "Type 2 — Twee onder een kap (stads-/gasverwarming)", 12, 3.9),
-        new ExcelLoadOption("V32_T2_RIJTJESWONING", "Type 2 — Rijtjeswoning (stads-/gasverwarming)", 13, 3.9),
-        new ExcelLoadOption("V32_T2_ONBEKEND", "Type 2 — Onbekend (stads-/gasverwarming)", 14, 3.9),
-        new ExcelLoadOption("V32_T3_VRIJSTAAND", "Type 3 — Vrijstaand (vanaf 2022, individuele warmtepomp)", 17, 7.5),
-        new ExcelLoadOption("V32_T3_TWEE_ONDER_EEN_KAP", "Type 3 — Twee onder een kap (vanaf 2022, individuele warmtepomp)", 18, 6.8),
+        new ExcelLoadOption("V32_T2_VRIJSTAAND", "Type 2 — Vrijstaand (stads-/gasverwarming)", 11, 8.9),
+        new ExcelLoadOption("V32_T2_TWEE_ONDER_EEN_KAP", "Type 2 — Twee onder een kap (stads-/gasverwarming)", 12, 6.8),
+        new ExcelLoadOption("V32_T2_RIJTJESWONING", "Type 2 — Rijtjeswoning (stads-/gasverwarming)", 13, 5.7),
+        new ExcelLoadOption("V32_T2_ONBEKEND", "Type 2 — Onbekend (stads-/gasverwarming)", 14, 5.7),
+        new ExcelLoadOption("V32_T3_VRIJSTAAND", "Type 3 — Vrijstaand (vanaf 2022, individuele warmtepomp)", 17, 9.2),
+        new ExcelLoadOption("V32_T3_TWEE_ONDER_EEN_KAP", "Type 3 — Twee onder een kap (vanaf 2022, individuele warmtepomp)", 18, 7.0),
         new ExcelLoadOption("V32_T3_RIJTJESWONING", "Type 3 — Rijtjeswoning (vanaf 2022, individuele warmtepomp)", 19, 6.3),
         new ExcelLoadOption("V32_T3_ONBEKEND", "Type 3 — Onbekend (vanaf 2022, individuele warmtepomp)", 20, 6.4),
         new ExcelLoadOption("V32_T4_APPARTEMENT", "Type 4 — Appartement incl. publiek laden (collectieve WP/stads-/gasverwarming)", 23, 3.4),
@@ -112,13 +111,11 @@ internal static class ExcelLoadCatalog
         new ExcelLoadOption("V32_T11_3X63_80A", "Type 11 — Straatmeubilair 3x63A t/m 3x80A", 79, 36.0)
     };
 
-    private static readonly Lazy<IReadOnlyList<ExcelLoadOption>> K2026 = new(BuildK2026);
-
     public static IReadOnlyList<ExcelLoadOption> For(KaderVersion version) => version switch
     {
         KaderVersion.K2024_1_0 => K2024,
         KaderVersion.K2025_2_0 => K2025,
-        KaderVersion.K2026_3_2 => K2026.Value,
+        KaderVersion.K2026_3_2 => K2026,
         _ => throw new ArgumentOutOfRangeException(nameof(version))
     };
 
@@ -129,79 +126,4 @@ internal static class ExcelLoadCatalog
 
     public static IReadOnlyList<ExcelLoadOption> FindByAmps(KaderVersion version, double amps) =>
         For(version).Where(x => Math.Abs(x.CableDesignCurrentAmps - amps) <= 1e-9).ToArray();
-
-    private static IReadOnlyList<ExcelLoadOption> BuildK2026()
-    {
-        var effectiveCurrents = ReadK2026EffectiveDesignCurrents();
-        return K2026Base
-            .Select(option => effectiveCurrents.TryGetValue(option.Row, out var amps)
-                ? option with { CableDesignCurrentAmps = amps }
-                : option)
-            .ToArray();
-    }
-
-    private static IReadOnlyDictionary<int, double> ReadK2026EffectiveDesignCurrents()
-    {
-        var assembly = typeof(ExcelLoadCatalog).Assembly;
-        var resourceName = assembly.GetManifestResourceNames()
-            .SingleOrDefault(name => name.EndsWith(K2026ResourceFileName, StringComparison.OrdinalIgnoreCase));
-        if (resourceName is null)
-            throw new InvalidOperationException($"Het ingebouwde Enexis Excel-template '{K2026ResourceFileName}' kon niet worden gevonden.");
-
-        using var stream = assembly.GetManifestResourceStream(resourceName)
-            ?? throw new InvalidOperationException($"Het ingebouwde Enexis Excel-template '{K2026ResourceFileName}' kon niet worden geopend.");
-        using var workbook = new XLWorkbook(stream);
-        var sheet = workbook.Worksheet("(1)");
-
-        var lastColumn = sheet.LastColumnUsed()?.ColumnNumber()
-            ?? throw new InvalidOperationException("Kader 3.2 bevat geen leesbare kolommen op richtingstabblad (1).");
-        var headerCells = sheet.Range(1, 1, 4, lastColumn).CellsUsed().ToArray();
-
-        var afnameHeader = headerCells.FirstOrDefault(cell =>
-        {
-            var text = NormalizeHeader(cell.GetString());
-            return text.Contains("ontwerpstroom", StringComparison.Ordinal) &&
-                   text.Contains("eenheid", StringComparison.Ordinal) &&
-                   !text.Contains("opwek", StringComparison.Ordinal);
-        });
-        var opwekHeader = headerCells.FirstOrDefault(cell =>
-        {
-            var text = NormalizeHeader(cell.GetString());
-            return text.Contains("ontwerpstroom", StringComparison.Ordinal) &&
-                   text.Contains("eenheid", StringComparison.Ordinal) &&
-                   text.Contains("opwek", StringComparison.Ordinal);
-        });
-
-        if (afnameHeader is null || opwekHeader is null)
-            throw new InvalidOperationException("De kolommen voor ontwerpstroom afname/opwek per eenheid zijn niet gevonden in kader 3.2.");
-
-        var afnameColumn = afnameHeader.Address.ColumnNumber;
-        var opwekColumn = opwekHeader.Address.ColumnNumber;
-        var result = new Dictionary<int, double>();
-        foreach (var option in K2026Base)
-        {
-            var afname = ReadAmps(sheet.Cell(option.Row, afnameColumn), option.CableDesignCurrentAmps);
-            var opwek = ReadAmps(sheet.Cell(option.Row, opwekColumn), 0.0);
-            result[option.Row] = Math.Max(afname, opwek);
-        }
-
-        return result;
-    }
-
-    private static double ReadAmps(IXLCell cell, double fallback)
-    {
-        if (cell.TryGetValue<double>(out var value) && value >= 0)
-            return value;
-
-        var text = cell.GetFormattedString().Trim();
-        if (double.TryParse(text, NumberStyles.Float, CultureInfo.GetCultureInfo("nl-NL"), out value) && value >= 0)
-            return value;
-        if (double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out value) && value >= 0)
-            return value;
-
-        return fallback;
-    }
-
-    private static string NormalizeHeader(string value) =>
-        value.Replace('\r', ' ').Replace('\n', ' ').Trim().ToLowerInvariant();
 }
