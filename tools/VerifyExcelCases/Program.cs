@@ -35,8 +35,6 @@ CheckCurrentTextRejected("geen stroomwaarde");
 CheckVirtualCut(100.0, 72.5, 20.0, 72.5, VirtualCutSide.Start);
 CheckVirtualCut(100.0, 72.5, 90.0, 27.5, VirtualCutSide.End);
 
-K32Inspector.Print();
-
 Console.WriteLine("Alle Excel-referentiecontroles, tekststroom-parsercontroles en virtuele-knipcontroles zijn geslaagd.");
 return;
 
