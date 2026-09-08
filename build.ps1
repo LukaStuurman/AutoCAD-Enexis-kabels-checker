@@ -9,6 +9,7 @@ $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 
 $coreCheck = Join-Path $root "tools\VerifyExcelCases\VerifyExcelCases.csproj"
+$isolationCheck = Join-Path $root "tools\VerifyExcelIsolation\VerifyExcelIsolation.csproj"
 $acadProject = Join-Path $root "src\Enexis.KabelChecker.AutoCAD\Enexis.KabelChecker.AutoCAD.csproj"
 $excelWorkerProject = Join-Path $root "src\Enexis.KabelChecker.ExcelWorker\Enexis.KabelChecker.ExcelWorker.csproj"
 $bundleTemplate = Join-Path $root "build\PackageContents.xml"
@@ -47,25 +48,36 @@ function Invoke-AutoCADBuild {
     }
 }
 
-Write-Host "1/6 Controleer rekenengine tegen Excel-referentiegevallen..."
+Write-Host "1/8 Controleer rekenengine tegen Excel-referentiegevallen..."
 dotnet run --project $coreCheck -c $Configuration
 if ($LASTEXITCODE -ne 0) { throw "Excel-referentiecontrole mislukt." }
 
-Write-Host "2/6 Bouw geïsoleerde Excel-worker voor .NET 8..."
+Write-Host "2/8 Bouw geïsoleerde Excel-worker voor .NET 8..."
 dotnet build $excelWorkerProject -c $Configuration -f net8.0-windows
 if ($LASTEXITCODE -ne 0) { throw "Build van .NET 8 Excel-worker mislukt." }
 
-Write-Host "3/6 Bouw .NET 8-plugin voor AutoCAD 2025/2026 (R25.x)..."
+$workerOutputNet8 = Join-Path $root "src\Enexis.KabelChecker.ExcelWorker\bin\$Configuration\net8.0-windows"
+$workerOutputNet10 = Join-Path $root "src\Enexis.KabelChecker.ExcelWorker\bin\$Configuration\net10.0-windows"
+
+Write-Host "3/8 Test ClosedXML-isolatie voor .NET 8..."
+dotnet run --project $isolationCheck -c $Configuration -f net8.0-windows -- (Join-Path $workerOutputNet8 "Enexis.KabelChecker.ExcelWorker.dll")
+if ($LASTEXITCODE -ne 0) { throw ".NET 8 ClosedXML-isolatietest mislukt." }
+
+Write-Host "4/8 Bouw .NET 8-plugin voor AutoCAD 2025/2026 (R25.x)..."
 Invoke-AutoCADBuild -Series "R25" -ManagedDir $AutoCADManagedDir
 
-Write-Host "4/6 Bouw geïsoleerde Excel-worker voor .NET 10..."
+Write-Host "5/8 Bouw geïsoleerde Excel-worker voor .NET 10..."
 dotnet build $excelWorkerProject -c $Configuration -f net10.0-windows
 if ($LASTEXITCODE -ne 0) { throw "Build van .NET 10 Excel-worker mislukt." }
 
-Write-Host "5/6 Bouw .NET 10-plugin voor AutoCAD 2027+ (R26.0+)..."
+Write-Host "6/8 Test ClosedXML-isolatie voor .NET 10..."
+dotnet run --project $isolationCheck -c $Configuration -f net10.0-windows -- (Join-Path $workerOutputNet10 "Enexis.KabelChecker.ExcelWorker.dll")
+if ($LASTEXITCODE -ne 0) { throw ".NET 10 ClosedXML-isolatietest mislukt." }
+
+Write-Host "7/8 Bouw .NET 10-plugin voor AutoCAD 2027+ (R26.0+)..."
 Invoke-AutoCADBuild -Series "R26" -ManagedDir $AutoCAD2027ManagedDir
 
-Write-Host "6/6 Maak gecombineerde .bundle..."
+Write-Host "8/8 Maak gecombineerde .bundle..."
 if (Test-Path $bundle) { Remove-Item $bundle -Recurse -Force }
 New-Item -ItemType Directory -Path $excelNet8 -Force | Out-Null
 New-Item -ItemType Directory -Path $excelNet10 -Force | Out-Null
@@ -73,8 +85,6 @@ Copy-Item $bundleTemplate (Join-Path $bundle "PackageContents.xml") -Force
 
 $outputNet8 = Join-Path $root "src\Enexis.KabelChecker.AutoCAD\bin\$Configuration\net8.0-windows"
 $outputNet10 = Join-Path $root "src\Enexis.KabelChecker.AutoCAD\bin\$Configuration\net10.0-windows"
-$workerOutputNet8 = Join-Path $root "src\Enexis.KabelChecker.ExcelWorker\bin\$Configuration\net8.0-windows"
-$workerOutputNet10 = Join-Path $root "src\Enexis.KabelChecker.ExcelWorker\bin\$Configuration\net10.0-windows"
 
 # De AutoCAD-plugin zelf bevat bewust GEEN ClosedXML-reference meer. ClosedXML en
 # alle transitive dependencies staan in een submap en worden uitsluitend via een
