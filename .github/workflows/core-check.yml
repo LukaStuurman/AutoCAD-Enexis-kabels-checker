@@ -12,23 +12,25 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup .NET 8
+      - name: Setup .NET 8 and .NET 10
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '8.0.x'
+          dotnet-version: |
+            8.0.x
+            10.0.x
 
       - name: Verify Excel reference cases
         run: dotnet run --project tools/VerifyExcelCases/VerifyExcelCases.csproj -c Release
 
-      - name: Build AutoCAD plugin including Excel export
-        run: dotnet build src/Enexis.KabelChecker.AutoCAD/Enexis.KabelChecker.AutoCAD.csproj -c Release -p:UseAutoCADNuGet=true
+      - name: Build AutoCAD 2025/2026 plugin
+        run: dotnet build src/Enexis.KabelChecker.AutoCAD/Enexis.KabelChecker.AutoCAD.csproj -c Release -p:UseAutoCADNuGet=true -p:AutoCADApiSeries=R25
 
-      - name: Verify required .NET runtime dependency packaging
+      - name: Build isolated .NET 8 Excel worker
+        run: dotnet build src/Enexis.KabelChecker.ExcelWorker/Enexis.KabelChecker.ExcelWorker.csproj -c Release -f net8.0-windows
+
+      - name: Verify ClosedXML conflict isolation
         shell: pwsh
         run: |
-          $target = Join-Path $env:RUNNER_TEMP 'EnexisRuntimeDependencyCheck'
-          if (Test-Path $target) { Remove-Item $target -Recurse -Force }
-          & 'build\CopyDotNetRuntimeDependencies.ps1' -Destination $target
-          if (-not (Test-Path (Join-Path $target 'System.IO.Compression.Brotli.dll'))) {
-            throw 'System.IO.Compression.Brotli.dll kon niet voor de bundle worden verpakt.'
-          }
+          $worker = 'src\Enexis.KabelChecker.ExcelWorker\bin\Release\net8.0-windows\Enexis.KabelChecker.ExcelWorker.dll'
+          dotnet run --project tools/VerifyExcelIsolation/VerifyExcelIsolation.csproj -c Release -f net8.0-windows -- $worker
+          if ($LASTEXITCODE -ne 0) { throw 'ClosedXML-isolatietest mislukt.' }
