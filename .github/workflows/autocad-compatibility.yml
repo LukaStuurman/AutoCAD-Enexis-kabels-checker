@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - 'src/**'
+      - 'tools/**'
       - 'build/**'
       - 'build.ps1'
       - '.github/workflows/autocad-compatibility.yml'
@@ -12,6 +13,7 @@ on:
     branches: [ main ]
     paths:
       - 'src/**'
+      - 'tools/**'
       - 'build/**'
       - 'build.ps1'
       - '.github/workflows/autocad-compatibility.yml'
@@ -33,17 +35,27 @@ jobs:
             8.0.x
             10.0.x
 
-      - name: Verify Excel reference cases
+      - name: Build, test and package both AutoCAD generations
         shell: pwsh
-        run: dotnet run --project tools/VerifyExcelCases/VerifyExcelCases.csproj -c Release
+        run: .\build.ps1 -Configuration Release
 
-      - name: Build AutoCAD 2025/2026 target
+      - name: Validate isolated Excel packaging
         shell: pwsh
-        run: dotnet build src/Enexis.KabelChecker.AutoCAD/Enexis.KabelChecker.AutoCAD.csproj -c Release -p:UseAutoCADNuGet=true -p:AutoCADApiSeries=R25
-
-      - name: Build AutoCAD 2027+ target
-        shell: pwsh
-        run: dotnet build src/Enexis.KabelChecker.AutoCAD/Enexis.KabelChecker.AutoCAD.csproj -c Release -p:UseAutoCADNuGet=true -p:AutoCADApiSeries=R26
+        run: |
+          foreach ($root in @(
+            'dist\EnexisKabelChecker.bundle\Contents\Windows\net8',
+            'dist\EnexisKabelChecker.bundle\Contents\Windows\net10'
+          )) {
+            if (Test-Path (Join-Path $root 'ClosedXML.dll')) {
+              throw "ClosedXML.dll staat ten onrechte in AutoCAD's standaard load-map: $root"
+            }
+            $excel = Join-Path $root 'excel'
+            foreach ($required in @('Enexis.KabelChecker.ExcelWorker.dll', 'ClosedXML.dll')) {
+              if (-not (Test-Path (Join-Path $excel $required))) {
+                throw "$required ontbreekt in geïsoleerde Excel-map: $excel"
+              }
+            }
+          }
 
       - name: Validate PackageContents routing
         shell: pwsh
