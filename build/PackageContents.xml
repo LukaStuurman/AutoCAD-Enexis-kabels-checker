@@ -10,13 +10,30 @@
   ProductCode="{A2860F05-1A53-4896-8D0D-2352653188A7}"
   UpgradeCode="{D7C51584-3C82-44BF-A614-3CF43BA51D41}">
   <CompanyDetails Name="Luka Stuurman" />
-  <RuntimeRequirements OS="Win64" Platform="AutoCAD*" SeriesMin="R25.0" SeriesMax="R25.1" />
   <Components>
     <ComponentEntry
       AppName="Enexis Kabel Checker"
-      ModuleName="./Contents/Windows/Enexis.KabelChecker.AutoCAD.dll"
-      AppDescription="Enexis LS-kabelcontrole"
+      AppType=".Net"
+      ModuleName="./Contents/Windows/net8/Enexis.KabelChecker.AutoCAD.dll"
+      AppDescription="Enexis LS-kabelcontrole (.NET 8 voor AutoCAD 2025/2026)"
       LoadOnAutoCADStartup="True">
+      <RuntimeRequirements OS="Win64" Platform="AutoCAD*" SeriesMin="R25.0" SeriesMax="R25.1" />
+      <Commands GroupName="ENEXIS_KABEL_CHECKER">
+        <Command Global="ENEXISKABELCHECK" Local="ENEXISKABELCHECK" />
+        <Command Global="ENEXISKABELCHECKSEL" Local="ENEXISKABELCHECKSEL" />
+      </Commands>
+    </ComponentEntry>
+    <ComponentEntry
+      AppName="Enexis Kabel Checker"
+      AppType=".Net"
+      ModuleName="./Contents/Windows/net10/Enexis.KabelChecker.AutoCAD.dll"
+      AppDescription="Enexis LS-kabelcontrole (.NET 10 voor AutoCAD 2027 en nieuwer)"
+      LoadOnAutoCADStartup="True">
+      <!-- AutoCAD 2027 is R26.0. SeriesMax is bewust open gelaten zodat latere
+           AutoCAD-versies deze .NET 10-build kunnen laden zolang Autodesk de
+           R26 Managed .NET API binary-compatible houdt. Bij een toekomstige
+           API/runtime-breuk moet een nieuwe buildtarget worden toegevoegd. -->
+      <RuntimeRequirements OS="Win64" Platform="AutoCAD*" SeriesMin="R26.0" />
       <Commands GroupName="ENEXIS_KABEL_CHECKER">
         <Command Global="ENEXISKABELCHECK" Local="ENEXISKABELCHECK" />
         <Command Global="ENEXISKABELCHECKSEL" Local="ENEXISKABELCHECKSEL" />
