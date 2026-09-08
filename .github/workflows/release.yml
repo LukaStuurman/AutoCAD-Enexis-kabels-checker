@@ -34,17 +34,9 @@ jobs:
           "version=$version" >> $env:GITHUB_OUTPUT
           "tag=v$version" >> $env:GITHUB_OUTPUT
 
-      - name: Verify Excel reference cases
+      - name: Build, test and package AutoCAD 2025/2026/2027+
         shell: pwsh
-        run: dotnet run --project tools/VerifyExcelCases/VerifyExcelCases.csproj -c Release
-
-      - name: Build AutoCAD 2025/2026 .NET 8 plugin
-        shell: pwsh
-        run: dotnet build src/Enexis.KabelChecker.AutoCAD/Enexis.KabelChecker.AutoCAD.csproj -c Release -p:UseAutoCADNuGet=true -p:AutoCADApiSeries=R25
-
-      - name: Build AutoCAD 2027+ .NET 10 plugin
-        shell: pwsh
-        run: dotnet build src/Enexis.KabelChecker.AutoCAD/Enexis.KabelChecker.AutoCAD.csproj -c Release -p:UseAutoCADNuGet=true -p:AutoCADApiSeries=R26
+        run: .\build.ps1 -Configuration Release
 
       - name: Make installable ZIP
         id: package
@@ -54,43 +46,40 @@ jobs:
           $version = '${{ steps.version.outputs.version }}'
           $releaseName = "EnexisKabelChecker-AutoCAD-2025-plus-v$version"
           $releaseRoot = Join-Path 'dist' $releaseName
-          $bundle = Join-Path $releaseRoot 'EnexisKabelChecker.bundle'
-          $contentsNet8 = Join-Path $bundle 'Contents\Windows\net8'
-          $contentsNet10 = Join-Path $bundle 'Contents\Windows\net10'
-          $outputNet8 = 'src\Enexis.KabelChecker.AutoCAD\bin\Release\net8.0-windows'
-          $outputNet10 = 'src\Enexis.KabelChecker.AutoCAD\bin\Release\net10.0-windows'
+          $builtBundle = 'dist\EnexisKabelChecker.bundle'
 
-          if (Test-Path 'dist') { Remove-Item 'dist' -Recurse -Force }
-          New-Item -ItemType Directory -Path $contentsNet8 -Force | Out-Null
-          New-Item -ItemType Directory -Path $contentsNet10 -Force | Out-Null
+          if (-not (Test-Path $builtBundle)) { throw 'Gebouwde EnexisKabelChecker.bundle ontbreekt.' }
+          if (Test-Path $releaseRoot) { Remove-Item $releaseRoot -Recurse -Force }
+          New-Item -ItemType Directory -Path $releaseRoot -Force | Out-Null
 
-          Copy-Item 'build\PackageContents.xml' (Join-Path $bundle 'PackageContents.xml') -Force
-          Copy-Item (Join-Path $outputNet8 '*.dll') $contentsNet8 -Force
-          Copy-Item (Join-Path $outputNet10 '*.dll') $contentsNet10 -Force
-
-          & 'build\CopyDotNetRuntimeDependencies.ps1' -Destination $contentsNet8 -RuntimeMajor 8
-          & 'build\CopyDotNetRuntimeDependencies.ps1' -Destination $contentsNet10 -RuntimeMajor 10
-
+          Copy-Item $builtBundle (Join-Path $releaseRoot 'EnexisKabelChecker.bundle') -Recurse -Force
           Copy-Item 'build\INSTALLEREN.bat' $releaseRoot -Force
           Copy-Item 'build\VERWIJDEREN.bat' $releaseRoot -Force
           Copy-Item 'build\LEESMIJ.txt' $releaseRoot -Force
 
           $zip = Join-Path 'dist' "$releaseName.zip"
+          if (Test-Path $zip) { Remove-Item $zip -Force }
           Compress-Archive -Path "$releaseRoot\*" -DestinationPath $zip -CompressionLevel Optimal
 
           if (-not (Test-Path $zip)) { throw 'Release-ZIP is niet aangemaakt.' }
-          foreach ($target in @(
-            @{ Name = '.NET 8'; Path = $contentsNet8 },
-            @{ Name = '.NET 10'; Path = $contentsNet10 }
+
+          foreach ($root in @(
+            (Join-Path $releaseRoot 'EnexisKabelChecker.bundle\Contents\Windows\net8'),
+            (Join-Path $releaseRoot 'EnexisKabelChecker.bundle\Contents\Windows\net10')
           )) {
-            foreach ($required in @(
-              'Enexis.KabelChecker.AutoCAD.dll',
-              'Enexis.KabelChecker.Core.dll',
-              'ClosedXML.dll',
-              'System.IO.Compression.Brotli.dll'
-            )) {
-              if (-not (Test-Path (Join-Path $target.Path $required))) {
-                throw "$required ontbreekt in de $($target.Name)-bundle."
+            foreach ($required in @('Enexis.KabelChecker.AutoCAD.dll', 'Enexis.KabelChecker.Core.dll')) {
+              if (-not (Test-Path (Join-Path $root $required))) {
+                throw "$required ontbreekt in release-map $root."
+              }
+            }
+            if (Test-Path (Join-Path $root 'ClosedXML.dll')) {
+              throw "ClosedXML.dll mag niet naast de AutoCAD-plugin staan: $root"
+            }
+
+            $excel = Join-Path $root 'excel'
+            foreach ($required in @('Enexis.KabelChecker.ExcelWorker.dll', 'ClosedXML.dll')) {
+              if (-not (Test-Path (Join-Path $excel $required))) {
+                throw "$required ontbreekt in geïsoleerde Excel-map $excel."
               }
             }
           }
@@ -119,16 +108,21 @@ jobs:
 
           Compatibiliteit:
           - AutoCAD 2025/2026: .NET 8-build tegen AutoCAD API R25.
-          - AutoCAD 2027 en nieuwer: .NET 10-build tegen AutoCAD API R26.0. Latere versies worden door de bundle toegelaten zolang Autodesk binary compatibility behoudt.
+          - AutoCAD 2027 en nieuwer: .NET 10-build tegen AutoCAD API R26.0.
+
+          Excel-export:
+          - ClosedXML en de Excel-dependencies draaien voortaan in een eigen geïsoleerde .NET AssemblyLoadContext.
+          - Dit voorkomt assembly-conflicten met de ClosedXML-versie die Autodesk zelf in AutoCAD laadt.
+          - De CI test dit expliciet door eerst een oudere ClosedXML-versie in de standaard load-context te laden en daarna de export met de geïsoleerde worker uit te voeren.
 
           Installeren:
           1. Download en pak de ZIP uit.
-          2. Sluit AutoCAD.
+          2. Sluit AutoCAD volledig.
           3. Dubbelklik INSTALLEREN.bat en bevestig de UAC-melding.
           4. Start AutoCAD opnieuw.
           5. Typ ENEXISKABELCHECK.
 
-          De ZIP bevat beide gecompileerde pluginvarianten; AutoCAD kiest via PackageContents.xml automatisch de juiste DLL.
+          De ZIP bevat beide AutoCAD-builds en per build een geïsoleerde Excel-worker; AutoCAD kiest via PackageContents.xml automatisch de juiste plugin-DLL.
           "@
 
           gh release view $tag *> $null
