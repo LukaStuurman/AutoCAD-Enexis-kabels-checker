@@ -1,6 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net8.0-windows</TargetFramework>
+    <AutoCADApiSeries Condition="'$(AutoCADApiSeries)' == ''">R25</AutoCADApiSeries>
+    <TargetFramework Condition="'$(AutoCADApiSeries)' == 'R26'">net10.0-windows</TargetFramework>
+    <TargetFramework Condition="'$(AutoCADApiSeries)' != 'R26'">net8.0-windows</TargetFramework>
+    <AutoCADNuGetVersion Condition="'$(AutoCADApiSeries)' == 'R26'">26.0.0</AutoCADNuGetVersion>
+    <AutoCADNuGetVersion Condition="'$(AutoCADApiSeries)' != 'R26'">25.0.1</AutoCADNuGetVersion>
     <UseWindowsForms>true</UseWindowsForms>
     <UseWPF>true</UseWPF>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -8,10 +12,15 @@
     <LangVersion>latest</LangVersion>
     <AssemblyName>Enexis.KabelChecker.AutoCAD</AssemblyName>
     <RootNamespace>Enexis.KabelChecker.AutoCAD</RootNamespace>
-    <AutoCADManagedDir Condition="'$(AutoCADManagedDir)' == ''">C:\Program Files\Autodesk\AutoCAD 2025</AutoCADManagedDir>
+    <AutoCADManagedDir Condition="'$(AutoCADManagedDir)' == '' and '$(AutoCADApiSeries)' == 'R26'">C:\Program Files\Autodesk\AutoCAD 2027</AutoCADManagedDir>
+    <AutoCADManagedDir Condition="'$(AutoCADManagedDir)' == '' and '$(AutoCADApiSeries)' != 'R26'">C:\Program Files\Autodesk\AutoCAD 2025</AutoCADManagedDir>
     <UseAutoCADNuGet Condition="'$(UseAutoCADNuGet)' == ''">false</UseAutoCADNuGet>
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
   </PropertyGroup>
+
+  <Target Name="ValidateAutoCADApiSeries" BeforeTargets="PrepareForBuild" Condition="'$(AutoCADApiSeries)' != 'R25' and '$(AutoCADApiSeries)' != 'R26'">
+    <Error Text="AutoCADApiSeries moet R25 (AutoCAD 2025/2026) of R26 (AutoCAD 2027+) zijn." />
+  </Target>
 
   <ItemGroup>
     <ProjectReference Include="..\Enexis.KabelChecker.Core\Enexis.KabelChecker.Core.csproj" />
@@ -27,7 +36,7 @@
   </ItemGroup>
 
   <ItemGroup Condition="'$(UseAutoCADNuGet)' == 'true'">
-    <PackageReference Include="AutoCAD.NET" Version="25.0.1" ExcludeAssets="runtime" PrivateAssets="all" />
+    <PackageReference Include="AutoCAD.NET" Version="$(AutoCADNuGetVersion)" ExcludeAssets="runtime" PrivateAssets="all" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(UseAutoCADNuGet)' != 'true'">

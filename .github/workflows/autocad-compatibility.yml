@@ -1,0 +1,67 @@
+name: AutoCAD compatibility
+
+on:
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'build/**'
+      - 'build.ps1'
+      - '.github/workflows/autocad-compatibility.yml'
+      - '.github/workflows/release.yml'
+  push:
+    branches: [ main ]
+    paths:
+      - 'src/**'
+      - 'build/**'
+      - 'build.ps1'
+      - '.github/workflows/autocad-compatibility.yml'
+      - '.github/workflows/release.yml'
+  workflow_dispatch:
+
+jobs:
+  build-supported-autocad-generations:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8 and .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      - name: Verify Excel reference cases
+        shell: pwsh
+        run: dotnet run --project tools/VerifyExcelCases/VerifyExcelCases.csproj -c Release
+
+      - name: Build AutoCAD 2025/2026 target
+        shell: pwsh
+        run: dotnet build src/Enexis.KabelChecker.AutoCAD/Enexis.KabelChecker.AutoCAD.csproj -c Release -p:UseAutoCADNuGet=true -p:AutoCADApiSeries=R25
+
+      - name: Build AutoCAD 2027+ target
+        shell: pwsh
+        run: dotnet build src/Enexis.KabelChecker.AutoCAD/Enexis.KabelChecker.AutoCAD.csproj -c Release -p:UseAutoCADNuGet=true -p:AutoCADApiSeries=R26
+
+      - name: Validate PackageContents routing
+        shell: pwsh
+        run: |
+          [xml]$xml = Get-Content 'build\PackageContents.xml'
+          $entries = @($xml.ApplicationPackage.Components.ComponentEntry)
+          if ($entries.Count -ne 2) { throw "Verwacht precies 2 AutoCAD ComponentEntry's, gevonden: $($entries.Count)." }
+
+          $net8 = $entries | Where-Object { $_.ModuleName -like '*net8*' }
+          $net10 = $entries | Where-Object { $_.ModuleName -like '*net10*' }
+          if ($null -eq $net8 -or $null -eq $net10) { throw 'net8/net10 component routing ontbreekt.' }
+
+          if ($net8.RuntimeRequirements.SeriesMin -ne 'R25.0' -or $net8.RuntimeRequirements.SeriesMax -ne 'R25.1') {
+            throw 'AutoCAD 2025/2026 moet exact naar R25.0-R25.1/.NET 8 routeren.'
+          }
+          if ($net10.RuntimeRequirements.SeriesMin -ne 'R26.0') {
+            throw 'AutoCAD 2027+ moet vanaf R26.0 naar .NET 10 routeren.'
+          }
+          if ($net10.RuntimeRequirements.HasAttribute('SeriesMax')) {
+            throw 'De R26/.NET 10 component moet open-ended blijven voor toekomstige binary-compatible AutoCAD-versies.'
+          }

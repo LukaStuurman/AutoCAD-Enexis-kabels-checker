@@ -41,7 +41,7 @@ echo Enexis Kabel Checker is geinstalleerd.
 echo ================================================
 echo.
 echo 1. Sluit AutoCAD volledig als het nog open staat.
-echo 2. Start AutoCAD 2025 of 2026 opnieuw.
+echo 2. Start AutoCAD 2025, 2026, 2027 of een nieuwere compatibele versie opnieuw.
 echo 3. Typ: ENEXISKABELCHECK
 echo.
 echo Installatiemap:
