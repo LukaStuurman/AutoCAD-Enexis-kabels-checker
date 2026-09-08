@@ -1,5 +1,5 @@
-ENEXIS KABEL CHECKER - AUTOCAD 2025/2026
-=========================================
+ENEXIS KABEL CHECKER - AUTOCAD 2025 EN NIEUWER
+==============================================
 
 Gemaakt door Luka Stuurman
 
@@ -8,8 +8,14 @@ INSTALLEREN
 2. Pak deze ZIP helemaal uit naar een normale map.
 3. Dubbelklik INSTALLEREN.bat.
 4. Bevestig de Windows UAC-melding.
-5. Start AutoCAD 2025, AutoCAD 2026 of een AutoCAD-gebaseerd product zoals Civil 3D 2025/2026.
+5. Start AutoCAD 2025, 2026, 2027 of een nieuwere compatibele AutoCAD-versie / AutoCAD-gebaseerd product.
 6. Typ ENEXISKABELCHECK in de AutoCAD-opdrachtregel.
+
+COMPATIBILITEIT
+- AutoCAD 2025/2026 gebruikt de .NET 8-build tegen AutoCAD API R25.
+- AutoCAD 2027 gebruikt de .NET 10-build tegen AutoCAD API R26.0.
+- Nieuwere AutoCAD-versies mogen automatisch de .NET 10-build laden zolang Autodesk binary compatibility met R26 behoudt.
+- Als Autodesk in een toekomstige release opnieuw de Managed .NET API/runtime binary-incompatibel maakt, is daarvoor een nieuwe buildtarget nodig. De release hoeft dan niet meer opnieuw van nul te worden ingericht: de bundle en CI zijn al opgesplitst per AutoCAD API-generatie.
 
 GEBRUIK KABELRICHTING
 - Kies een kabeltype, bijvoorbeeld 4*150mm2 Al.
@@ -21,14 +27,14 @@ GEBRUIK KABELRICHTING
 - Gebruik 'Verwijder rij' om alleen het geselecteerde kabelsegment te verwijderen.
 - Klik 'Bereken richting'. Het resultaatblok toont alleen de hoogste toegestane gG-zekering.
 - Een wijziging aan kabeltype, kabellengte of belastingsprofiel maakt alleen de kabelberekening ongeldig. De reeds opgebouwde ontwerpstroomtabel blijft staan.
-- De onderste knop 'Reset' is vanaf v1.7.0 een volledige reset: kabelsegmenten, zekeringresultaat, profiel, ontwerpstroomrijen, geselecteerde tekstobjecten en cirkelstraal worden teruggezet. De cirkelstraal gaat terug naar 3,0 m.
+- De onderste knop 'Reset' is een volledige reset: kabelsegmenten, zekeringresultaat, profiel, ontwerpstroomrijen, geselecteerde tekstobjecten en cirkelstraal worden teruggezet. De cirkelstraal gaat terug naar 3,0 m.
 
 ONTWERPSTROOM CONTROLEREN UIT TEXT/MTEXT
 1. Ontwerpstroom en kabelrichting zijn onafhankelijk. Je mag dus eerst ontwerpstroom selecteren en pas daarna de kabelrichting opbouwen/berekenen, of andersom.
 2. Gebruik 'Cirkel' voor de ronde selectieborstel. De standaard 'Cirkelstraal [m]' is 3,0 m.
 3. Een losse linkerklik voegt alle geldige TEXT/MTEXT-objecten binnen de cirkel toe.
 4. Houd de linker muisknop ingedrukt en sleep om de cirkel als echte selectieborstel te gebruiken. Alle geldige teksten waar de cirkel tijdens de sleepbeweging overheen komt worden meegenomen.
-5. Vanaf v1.7.1 wordt het loslaten van de linker muisknop direct door AutoCAD als eindpunt van de sleepbeweging verwerkt. Er is dus geen extra linkerklik meer nodig na het slepen.
+5. Het loslaten van de linker muisknop wordt direct door AutoCAD als eindpunt van de sleepbeweging verwerkt. Er is dus geen extra linkerklik meer nodig na het slepen.
 6. De borstel vult ook tussenpunten tussen opeenvolgende cursorposities op, zodat snel slepen geen gaten in het selectiepad geeft.
 7. Houd SHIFT ingedrukt tijdens klikken of slepen om eerder geselecteerde TEXT/MTEXT-objecten binnen het borstelpad te DESELECTEREN.
 8. Tijdens de cirkelselectie blijven geselecteerde tekstobjecten met AutoCAD's selectie-highlight zichtbaar. Enter rondt de cirkelselectie af.
@@ -49,8 +55,8 @@ INSTALLATIEMAP
 C:\Program Files\Autodesk\ApplicationPlugins\EnexisKabelChecker.bundle
 
 VERSIE
-1.7.1
+Zie de GitHub Release en ZIP-bestandsnaam voor het actuele versienummer.
 
 OPMERKING
-Deze release is bedoeld voor AutoCAD 2025/2026 op Windows 64-bit. De bundle gebruikt Platform="AutoCAD*" en is daarmee ook bedoeld voor AutoCAD-gebaseerde producten zoals Civil 3D 2025/2026.
+De bundle gebruikt Platform="AutoCAD*" en is daarmee ook bedoeld voor compatibele AutoCAD-gebaseerde producten, zoals Civil 3D van dezelfde API-generatie.
 De precieze selectie-highlight volgt de actieve AutoCAD-instellingen voor selectie-effecten.
