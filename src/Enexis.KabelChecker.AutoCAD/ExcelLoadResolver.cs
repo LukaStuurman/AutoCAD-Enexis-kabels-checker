@@ -21,13 +21,26 @@ internal static class ExcelLoadResolver
 
         foreach (var load in currentLoads)
         {
-            var matches = ExcelLoadCatalog.FindByAmps(version, load.Amps);
+            // Een bestaande typekoppeling blijft geldig bij wisselen tussen verbruik en opwek.
+            var reusable = existing?
+                .Where(x => Math.Abs(x.Amps - load.Amps) <= 1e-9 && ExcelLoadCatalog.FindByKey(version, x.ExcelLoadKey) is not null)
+                .ToArray() ?? Array.Empty<ExcelMappedLoad>();
+            if (reusable.Sum(x => x.Count) == load.Count && reusable.Length > 0)
+            {
+                resolved.AddRange(reusable.Select(x => x with { ExcelLoadKey = ExcelLoadCatalog.FindByKey(version, x.ExcelLoadKey)!.Key }));
+                continue;
+            }
+
+            var mode = KaderVersionSelection.CurrentMode;
+            var matches = reusable.Length > 0
+                ? reusable.Select(x => ExcelLoadCatalog.FindByKey(version, x.ExcelLoadKey)!).DistinctBy(x => x.Key).ToArray()
+                : ExcelLoadCatalog.FindByAmps(version, load.Amps, mode);
             if (matches.Count == 0)
             {
                 var versionName = KaderVersions.Get(version).DisplayName;
                 ShowMessage(
                     owner,
-                    $"Ontwerpstroom {load.Amps:0.##} A komt niet voor in de invoertabel van {versionName}.",
+                    $"Ontwerpstroom {load.Amps:0.##} A komt niet voor bij {mode} in {versionName}. Kies het aansluittype via 'Uit kader', of voer een waarde uit de gekozen kolom in.",
                     "Geen Excel-koppeling",
                     MessageBoxIcon.Warning);
                 return null;
@@ -36,15 +49,6 @@ internal static class ExcelLoadResolver
             if (matches.Count == 1)
             {
                 resolved.Add(new ExcelMappedLoad(matches[0].Key, load.Amps, load.Count));
-                continue;
-            }
-
-            var reusable = existing?
-                .Where(x => Math.Abs(x.Amps - load.Amps) <= 1e-9 && matches.Any(m => m.Key.Equals(x.ExcelLoadKey, StringComparison.OrdinalIgnoreCase)))
-                .ToArray() ?? Array.Empty<ExcelMappedLoad>();
-            if (reusable.Sum(x => x.Count) == load.Count)
-            {
-                resolved.AddRange(reusable.Select(x => new ExcelMappedLoad(x.ExcelLoadKey, x.Amps, x.Count)));
                 continue;
             }
 

@@ -7,7 +7,8 @@ namespace Enexis.KabelChecker.AutoCAD;
 internal sealed record SavedStationSnapshot(
     string Name,
     KaderVersion KaderVersion,
-    IReadOnlyList<DirectionState> Directions);
+    IReadOnlyList<DirectionState> Directions,
+    DesignCurrentMode CurrentMode = DesignCurrentMode.Automatisch);
 
 internal sealed class StationPersistence
 {
@@ -21,12 +22,12 @@ internal sealed class StationPersistence
 
     private readonly string _filePath;
 
-    private StationPersistence()
+    internal StationPersistence(string? filePath = null)
     {
         var folder = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             "EnexisKabelChecker");
-        _filePath = Path.Combine(folder, "stations.json");
+        _filePath = filePath ?? Path.Combine(folder, "stations.json");
     }
 
     public IReadOnlyList<string> Names =>
@@ -40,7 +41,8 @@ internal sealed class StationPersistence
     public bool Save(
         string name,
         KaderVersion kaderVersion,
-        IEnumerable<DirectionState> directions)
+        IEnumerable<DirectionState> directions,
+        DesignCurrentMode currentMode = DesignCurrentMode.Automatisch)
     {
         var trimmedName = ValidateName(name);
         var directionArray = directions.OrderBy(x => x.Number).ToArray();
@@ -55,6 +57,7 @@ internal sealed class StationPersistence
         {
             Name = trimmedName,
             KaderVersion = kaderVersion,
+            CurrentMode = currentMode,
             Directions = directionArray.Select(ToDto).ToList()
         };
 
@@ -84,7 +87,8 @@ internal sealed class StationPersistence
         return new SavedStationSnapshot(
             station.Name,
             station.KaderVersion,
-            directions);
+            directions,
+            station.CurrentMode);
     }
 
     public bool Delete(string name)
@@ -205,6 +209,7 @@ internal sealed class StationPersistence
     {
         public string Name { get; set; } = string.Empty;
         public KaderVersion KaderVersion { get; set; } = KaderVersion.K2026_3_2;
+        public DesignCurrentMode CurrentMode { get; set; } = DesignCurrentMode.Automatisch;
         public List<DirectionDto> Directions { get; set; } = new();
     }
 

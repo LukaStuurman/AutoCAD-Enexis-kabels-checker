@@ -110,11 +110,14 @@ jobs:
           - AutoCAD 2025/2026: .NET 8-build tegen AutoCAD API R25.
           - AutoCAD 2027 en nieuwer: .NET 10-build tegen AutoCAD API R26.0.
 
-          Excel-export:
-          - De voorbeeldwaarde 1 in (1)!B46 is verwijderd uit het ingebouwde kader 3.0-template.
-          - Opgeslagen formule-uitkomsten zijn gewist en automatische herberekening bij openen is ingeschakeld, zodat Excel geen oude voorbeeldtotalen toont.
-          - De oorspronkelijke templateformules, opmaak en overige invoerwaarden zijn behouden.
-          - De build test de catalogi en exports van 3.0 en 3.2 voor .NET 8 en .NET 10, inclusief behoud van templateformules en wissen van voorbeeldgegevens.
+          Ontwerpstroom voor alle vier kaders (1.0, 2.0, 3.0 en 3.2):
+          - Kies Automatisch (standaard), Verbruik of Opwek per kader. De keuze wordt met het station opgeslagen.
+          - Automatisch vergelijkt eerst de afzonderlijke totalen; kabelrichting en station gebruiken hun eigen kabel- en trafowaarden.
+          - Uit kader laat je het aansluittype en aantal direct kiezen; beide kabelkolommen en de gezamenlijke trafototalen zijn zichtbaar.
+          - De Excel-export gebruikt de gekozen stroombasis voor de kabel en vult de gezamenlijke aantallen op het trafoblad, ook bij 1.0 en 2.0.
+          - De export herstelt ontbrekende of externe richtingkoppelingen in het 3.2-trafoblad en de kabeltotaalformule.
+          - De verwijderde voorbeeldwaarde in 3.0 (1)!B46 blijft verwijderd.
+          - De build controleert alle 136 aansluitopties, drie stroombases, kabel- en trafototalen en opslag van stations op .NET 8 en .NET 10.
           - De geïsoleerde Excel-worker voorkomt conflicten met Autodesk's eigen ClosedXML-versie.
 
           Installeren:

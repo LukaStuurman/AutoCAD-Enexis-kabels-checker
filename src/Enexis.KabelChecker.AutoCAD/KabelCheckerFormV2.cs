@@ -42,6 +42,8 @@ internal sealed class KabelCheckerForm : Form
         FillCablePicker();
         LoadPresetSegments(presetLengths);
         _directionNumber.Value = _store.FirstAvailableNumber();
+        _currentLoadPanel.InputsChanged += RefreshStationTotals;
+        _currentLoadPanel.CanChangeKader = CanChangeKader;
         RefreshSavedDirections();
         RefreshSavedStations();
         _message.Text = message ?? "Vul bovenaan een stationsnaam in. Bouw daarna één of meer richtingen op, voeg per richting ontwerpstroom toe en sla de richtingen of het volledige station op.";
@@ -333,6 +335,7 @@ internal sealed class KabelCheckerForm : Form
         {
             _grid.EndEdit();
             _currentLoadPanel.CommitPendingEdit();
+            if (_currentLoadPanel.ResolveMappedLoads(this) is null) return;
             var result = _engine.Calculate(_segments, ((ProfileItem)_profile.SelectedItem!).Profile);
             _fuseResult.Text = result.MaximumAllowed is null ? "Geen gG toegestaan" : $"{result.FuseAmps} A gG";
             _currentLoadPanel.SetCalculation(result);
@@ -363,8 +366,7 @@ internal sealed class KabelCheckerForm : Form
                 return false;
             }
 
-            var existing = _editingDirectionNumber is int number ? _store.Get(number)?.ExcelLoads : null;
-            var mapped = ExcelLoadResolver.Resolve(this, currentLoads, existing);
+            var mapped = _currentLoadPanel.ResolveMappedLoads(this);
             if (mapped is null) return false;
 
             var saved = _store.Save(selectedDirectionNumber, _editingDirectionNumber, profile, _segments, currentLoads, mapped);
@@ -393,7 +395,7 @@ internal sealed class KabelCheckerForm : Form
                 return;
 
             var name = _stationName.Text.Trim();
-            var replaced = _stations.Save(name, KaderVersionSelection.Current, _store.Directions);
+            var replaced = _stations.Save(name, KaderVersionSelection.Current, _store.Directions, KaderVersionSelection.CurrentMode);
             _stationName.Text = name;
             RefreshSavedStations(name);
             _message.Text = replaced
@@ -426,6 +428,7 @@ internal sealed class KabelCheckerForm : Form
 
             _stations.ReplaceCurrentDirections(_store, station.Directions);
             _currentLoadPanel.SetKaderVersion(station.KaderVersion);
+            _currentLoadPanel.SetCurrentMode(station.CurrentMode);
             _stationName.Text = station.Name;
             RefreshSavedStations(station.Name);
 
@@ -548,7 +551,7 @@ internal sealed class KabelCheckerForm : Form
         _segments.Clear();
         _segments.AddRange(state.Segments.Select(x => new CableSegment(x.CableName, RoundLengthMeters(x.LengthMeters))));
         RefreshSegmentGrid();
-        _currentLoadPanel.LoadCurrentLoads(state.CurrentLoads);
+        _currentLoadPanel.LoadCurrentLoads(state.CurrentLoads, state.ExcelLoads);
         ResetResult();
         _message.Text = $"Richting {state.Number} geladen. Ontwerpstromen en aantallen kunnen direct in de tabel worden aangepast.";
     }
@@ -568,6 +571,45 @@ internal sealed class KabelCheckerForm : Form
             else _savedDirections.SelectedIndex = -1;
         }
         finally { _refreshingDirections = false; }
+        RefreshStationTotals();
+    }
+
+    private void RefreshStationTotals()
+    {
+        var version = KaderVersionSelection.Current;
+        var saved = _store.Directions
+            .Where(x => !_currentLoadPanel.HasInputs || x.Number != _editingDirectionNumber).ToArray();
+        var loads = new List<ExcelMappedLoad>();
+        foreach (var direction in saved)
+        {
+            if (!DesignCurrentCalculator.MatchesInputs(direction.CurrentLoads, direction.ExcelLoads)
+                || direction.ExcelLoads.Any(x => ExcelLoadCatalog.FindByKey(version, x.ExcelLoadKey) is null))
+            {
+                _currentLoadPanel.SetStationTotals(null, saved.Length);
+                return;
+            }
+            loads.AddRange(direction.ExcelLoads);
+        }
+        if (_currentLoadPanel.HasInputs)
+        {
+            var mapped = _currentLoadPanel.GetMappedLoads();
+            if (mapped is null) { _currentLoadPanel.SetStationTotals(null, saved.Length + 1); return; }
+            loads.AddRange(mapped);
+        }
+        _currentLoadPanel.SetStationTotals(DesignCurrentCalculator.Calculate(version, loads),
+            saved.Length + (_currentLoadPanel.HasInputs ? 1 : 0));
+    }
+
+    private bool CanChangeKader(KaderVersion version)
+    {
+        // Identical numbers can mean different connection types in different editions.
+        // Only reuse known types, including equivalent 3.0/3.2 types.
+        var mapped = _store.Directions.SelectMany(x => x.ExcelLoads)
+            .Concat(_currentLoadPanel.GetMappedLoads() ?? Array.Empty<ExcelMappedLoad>());
+        if (mapped.All(x => ExcelLoadCatalog.FindByKey(version, x.ExcelLoadKey) is not null)) return true;
+        MessageBox.Show(this, "Dit kader bevat andere aansluittypes. Start een nieuw station met lege richtingen om dit kader te gebruiken.",
+            "Kader wijzigen", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        return false;
     }
 
     private void ExportExcel()
