@@ -10,6 +10,8 @@ $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 
 $coreCheck = Join-Path $root "tools\VerifyExcelCases\VerifyExcelCases.csproj"
 $isolationCheck = Join-Path $root "tools\VerifyExcelIsolation\VerifyExcelIsolation.csproj"
+$kaderCheck = Join-Path $root "tools\VerifyKaderTemplates\VerifyKaderTemplates.csproj"
+$kaderResources = Join-Path $root "src\Enexis.KabelChecker.AutoCAD\Resources"
 $acadProject = Join-Path $root "src\Enexis.KabelChecker.AutoCAD\Enexis.KabelChecker.AutoCAD.csproj"
 $excelWorkerProject = Join-Path $root "src\Enexis.KabelChecker.ExcelWorker\Enexis.KabelChecker.ExcelWorker.csproj"
 $bundleTemplate = Join-Path $root "build\PackageContents.xml"
@@ -56,6 +58,9 @@ Write-Host "2/8 Bouw geïsoleerde Excel-worker voor .NET 8..."
 dotnet build $excelWorkerProject -c $Configuration -f net8.0-windows
 if ($LASTEXITCODE -ne 0) { throw "Build van .NET 8 Excel-worker mislukt." }
 
+dotnet run --project $kaderCheck -c $Configuration -f net8.0-windows -- $kaderResources
+if ($LASTEXITCODE -ne 0) { throw ".NET 8 kadertemplatecontrole mislukt." }
+
 $workerOutputNet8 = Join-Path $root "src\Enexis.KabelChecker.ExcelWorker\bin\$Configuration\net8.0-windows"
 $workerOutputNet10 = Join-Path $root "src\Enexis.KabelChecker.ExcelWorker\bin\$Configuration\net10.0-windows"
 
@@ -69,6 +74,9 @@ Invoke-AutoCADBuild -Series "R25" -ManagedDir $AutoCADManagedDir
 Write-Host "5/8 Bouw geïsoleerde Excel-worker voor .NET 10..."
 dotnet build $excelWorkerProject -c $Configuration -f net10.0-windows
 if ($LASTEXITCODE -ne 0) { throw "Build van .NET 10 Excel-worker mislukt." }
+
+dotnet run --project $kaderCheck -c $Configuration -f net10.0-windows -- $kaderResources
+if ($LASTEXITCODE -ne 0) { throw ".NET 10 kadertemplatecontrole mislukt." }
 
 Write-Host "6/8 Test ClosedXML-isolatie voor .NET 10..."
 dotnet run --project $isolationCheck -c $Configuration -f net10.0-windows -- (Join-Path $workerOutputNet10 "Enexis.KabelChecker.ExcelWorker.dll")

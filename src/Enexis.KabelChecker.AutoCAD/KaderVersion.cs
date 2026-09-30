@@ -4,7 +4,8 @@ internal enum KaderVersion
 {
     K2024_1_0,
     K2025_2_0,
-    K2026_3_2
+    K2026_3_2,
+    K2026_3_0
 }
 
 internal sealed record KaderVersionDefinition(
@@ -21,6 +22,7 @@ internal static class KaderVersions
     {
         new KaderVersionDefinition(KaderVersion.K2024_1_0, "2024 — Eea-0205.K 1.0", "Eea-0205.K 1.0 - Copy.xlsx"),
         new KaderVersionDefinition(KaderVersion.K2025_2_0, "2025 — Eea-0205.K 2.0", "Eea-0205.K 2.0.xlsx"),
+        new KaderVersionDefinition(KaderVersion.K2026_3_0, "2026 — Eea-0205.K 3.0", "Eea-0205.K 3.0.xlsx"),
         new KaderVersionDefinition(KaderVersion.K2026_3_2, "2026 — Eea-0205.K 3.2", "Eea-0205.K 3.2.xlsx")
     };
 

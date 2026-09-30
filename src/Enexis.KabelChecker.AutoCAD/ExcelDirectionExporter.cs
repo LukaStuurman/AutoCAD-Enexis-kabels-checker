@@ -75,6 +75,7 @@ internal static class ExcelDirectionExporter
         {
             KaderVersion.K2024_1_0 => "Legacy2024",
             KaderVersion.K2025_2_0 => "Legacy2025",
+            KaderVersion.K2026_3_0 => "V30",
             KaderVersion.K2026_3_2 => "V32",
             _ => throw new ArgumentOutOfRangeException(nameof(version))
         };
