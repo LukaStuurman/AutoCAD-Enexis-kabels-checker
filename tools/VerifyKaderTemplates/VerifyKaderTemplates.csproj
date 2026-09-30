@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFrameworks>net8.0-windows;net10.0-windows</TargetFrameworks>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Enexis.KabelChecker.ExcelWorker\Enexis.KabelChecker.ExcelWorker.csproj" />
+    <Compile Include="..\..\src\Enexis.KabelChecker.AutoCAD\KaderVersion.cs" Link="KaderVersion.cs" />
+    <Compile Include="..\..\src\Enexis.KabelChecker.AutoCAD\ExcelLoadCatalog.cs" Link="ExcelLoadCatalog.cs" />
+  </ItemGroup>
+</Project>

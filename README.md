@@ -32,6 +32,9 @@ AutoCAD 2027 is niet binary-compatible met 2025/2026; daarom is één .NET 8-DLL
 
 ## Werkwijze in AutoCAD
 
+Bij **Kader versie** kun je kiezen uit 2024 (1.0), 2025 (2.0), 2026 (3.0) en 2026 (3.2).
+Kader 3.0 gebruikt het meegeleverde `Eea-0205.K 3.0.xlsx`, met 49 belastingopties en de eigen rijindeling voor aantallen en beide kabelcontroles. De plugin gebruikt per optie de hoogste ontwerpstroom van afname en opwek. Station opslaan bewaart ook deze kaderversie. Kader 3.2 blijft de standaardkeuze.
+
 Start `ENEXISKABELCHECK` en bouw één richting stap voor stap op:
 
 1. kies het kabeltype, bijvoorbeeld `150Al`;
@@ -93,6 +96,8 @@ Voor ontwikkeling kan de passende `Enexis.KabelChecker.AutoCAD.dll` ook met `NET
 ## CI-compatibiliteitscontrole
 
 `.github/workflows/autocad-compatibility.yml` compileert bij relevante pull requests en pushes beide ondersteunde AutoCAD API-generaties. De workflow controleert daarnaast dat `PackageContents.xml` AutoCAD 2025/2026 uitsluitend naar de .NET 8-build routeert en AutoCAD 2027+ naar de .NET 10-build.
+
+De build controleert voor kader 3.0 en 3.2 de belastingcatalogus tegen alle twaalf werkbladen van het originele template. Exportcontroles testen beide kabelprofielen, alle belastingopties, het wissen van voorbeeldgegevens en het behoud van templateformules, voor zowel .NET 8 als .NET 10.
 
 ## Belangrijk
 

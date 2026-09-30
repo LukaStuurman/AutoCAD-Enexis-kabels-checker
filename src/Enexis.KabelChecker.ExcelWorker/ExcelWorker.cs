@@ -34,7 +34,8 @@ public static class ExcelWorker
         using var templateStream = new MemoryStream(templateBytes, writable: false);
         using var workbook = new XLWorkbook(templateStream);
 
-        if (request.Layout.Equals("V32", StringComparison.OrdinalIgnoreCase))
+        if (request.Layout.Equals("V30", StringComparison.OrdinalIgnoreCase)
+            || request.Layout.Equals("V32", StringComparison.OrdinalIgnoreCase))
             Export2026(workbook, request);
         else if (request.Layout.Equals("Legacy2024", StringComparison.OrdinalIgnoreCase)
                  || request.Layout.Equals("Legacy2025", StringComparison.OrdinalIgnoreCase))
@@ -92,14 +93,18 @@ public static class ExcelWorker
 
     private static void Export2026(XLWorkbook workbook, ExportRequest request)
     {
-        Validate2026Templates(workbook);
+        Validate2026Templates(workbook, request.Layout);
+        var isV30 = request.Layout.Equals("V30", StringComparison.OrdinalIgnoreCase);
+        var countLastRow = isV30 ? 75 : V32CountLastRow;
+        var lastHalfFirstRow = isV30 ? 62 : 64;
+        var lastHalfLastRow = isV30 ? 80 : 82;
 
         for (var number = 1; number <= 12; number++)
         {
             var sheet = workbook.Worksheet($"({number})");
-            Clear2026Counts(sheet);
+            Clear2026Counts(sheet, countLastRow);
             ClearControlCableLengths(sheet, 18, 36, V32ControlLengthColumn);
-            ClearControlCableLengths(sheet, 64, 82, V32ControlLengthColumn);
+            ClearControlCableLengths(sheet, lastHalfFirstRow, lastHalfLastRow, V32ControlLengthColumn);
         }
 
         foreach (var direction in request.Directions.OrderBy(x => x.Number))
@@ -122,8 +127,8 @@ public static class ExcelWorker
                 WriteControlCableLengths(
                     sheet,
                     direction.Segments,
-                    64,
-                    82,
+                    lastHalfFirstRow,
+                    lastHalfLastRow,
                     V32ControlCableNameColumn,
                     V32ControlLengthColumn);
             }
@@ -145,7 +150,7 @@ public static class ExcelWorker
             throw new InvalidOperationException("Het Excel-template mist: " + string.Join(", ", missing.Select(x => $"'{x}'")) + ".");
     }
 
-    private static void Validate2026Templates(XLWorkbook workbook)
+    private static void Validate2026Templates(XLWorkbook workbook, string layout)
     {
         var missing = Enumerable.Range(1, 12)
             .Select(number => $"({number})")
@@ -155,7 +160,7 @@ public static class ExcelWorker
             missing.Add("Transformator");
 
         if (missing.Count > 0)
-            throw new InvalidOperationException("Kader 3.2 mist: " + string.Join(", ", missing.Select(x => $"'{x}'")) + ".");
+            throw new InvalidOperationException($"Kader {(layout.Equals("V30", StringComparison.OrdinalIgnoreCase) ? "3.0" : "3.2")} mist: " + string.Join(", ", missing.Select(x => $"'{x}'")) + ".");
     }
 
     private static string BuildDirectionCableSheetName(int directionNumber)
@@ -187,9 +192,9 @@ public static class ExcelWorker
             sheet.Cell(item.Row, LegacyCountColumn).Value = item.Count;
     }
 
-    private static void Clear2026Counts(IXLWorksheet sheet)
+    private static void Clear2026Counts(IXLWorksheet sheet, int lastRow)
     {
-        for (var row = V32CountFirstRow; row <= V32CountLastRow; row++)
+        for (var row = V32CountFirstRow; row <= lastRow; row++)
             sheet.Cell(row, V32CountColumn).Clear(XLClearOptions.Contents);
     }
 

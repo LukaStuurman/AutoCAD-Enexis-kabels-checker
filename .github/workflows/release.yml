@@ -111,9 +111,12 @@ jobs:
           - AutoCAD 2027 en nieuwer: .NET 10-build tegen AutoCAD API R26.0.
 
           Excel-export:
-          - ClosedXML en de Excel-dependencies draaien voortaan in een eigen geïsoleerde .NET AssemblyLoadContext.
-          - Dit voorkomt assembly-conflicten met de ClosedXML-versie die Autodesk zelf in AutoCAD laadt.
-          - De CI test dit expliciet door eerst een oudere ClosedXML-versie in de standaard load-context te laden en daarna de export met de geïsoleerde worker uit te voeren.
+          - Kader 2026 — Eea-0205.K 3.0 toegevoegd aan de keuzelijst, naast de bestaande kaders.
+          - Het aangeleverde 3.0-template is ingebouwd, met 49 belastingopties en de juiste rijmapping voor aantallen en beide kabelprofielen.
+          - De ontwerpstroom per optie gebruikt de hoogste waarde van afname en opwek uit kader 3.0.
+          - Station opslaan en openen ondersteunt de nieuwe kaderversie. Kader 3.2 blijft de standaardkeuze.
+          - De build test de catalogi en exports van 3.0 en 3.2 voor .NET 8 en .NET 10, inclusief behoud van templateformules en wissen van voorbeeldgegevens.
+          - De geïsoleerde Excel-worker voorkomt conflicten met Autodesk's eigen ClosedXML-versie.
 
           Installeren:
           1. Download en pak de ZIP uit.
