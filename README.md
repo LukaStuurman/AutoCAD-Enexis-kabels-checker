@@ -33,7 +33,13 @@ AutoCAD 2027 is niet binary-compatible met 2025/2026; daarom is één .NET 8-DLL
 ## Werkwijze in AutoCAD
 
 Bij **Kader versie** kun je kiezen uit 2024 (1.0), 2025 (2.0), 2026 (3.0) en 2026 (3.2).
-Kader 3.0 gebruikt het meegeleverde `Eea-0205.K 3.0.xlsx`, met 49 belastingopties en de eigen rijindeling voor aantallen en beide kabelcontroles. De plugin gebruikt per optie de hoogste ontwerpstroom van afname en opwek. Station opslaan bewaart ook deze kaderversie. Kader 3.2 blijft de standaardkeuze.
+Kader 3.0 gebruikt het meegeleverde `Eea-0205.K 3.0.xlsx`, met 49 belastingopties en de eigen rijindeling voor aantallen en beide kabelcontroles. Kader 3.2 blijft de standaardkeuze.
+
+Bij **Stroombasis** heeft ieder kader drie keuzes: **Automatisch** (standaard), **Verbruik** en **Opwek**. Automatisch telt beide kolommen eerst apart op en gebruikt daarna het hoogste totaal. De kabelcontrole gebruikt kabelwaarden; het stationoverzicht gebruikt de afzonderlijke trafowaarden en alle richtingen samen. Daardoor kan voor het station een andere kolom maatgevend zijn dan voor een richting. De keuze wordt per kader onthouden tijdens de sessie en met het station opgeslagen. Bestaande stations starten in Automatisch.
+
+Met **Uit kader** kies je direct een aansluittype en aantal. De tabel toont de verbruik- en opwektotalen. **Cirkel** en **Handmatig** herkennen tekstwaarden uit de gekozen kolom; Automatisch herkent beide kolommen. Bij een dubbelzinnige waarde vraagt **Bereken richting** om de verdeling over aansluittypes. Een bestaande typekoppeling blijft bij een andere stroombasis behouden. Een lege opwekkolom telt als nul; het aansluittype kan dan via Uit kader worden toegevoegd.
+
+Bij alle vier kaders vult de Excel-export ook het trafoblad met de gezamenlijke richtingaantallen. In 1.0/2.0 schrijft de plugin dit totaal op het losse trafoblad. In 3.0/3.2 gebruikt dat blad formuleverwijzingen naar de twaalf richtingbladen. De gekozen stroombasis bepaalt de kabelontwerpstroom in de export. Beide trafototalen blijven zichtbaar. Details en gecontroleerde broncellen staan in [Ontwerpstroom per kader](docs/ontwerpstroom-per-kader.md).
 
 Start `ENEXISKABELCHECK` en bouw één richting stap voor stap op:
 

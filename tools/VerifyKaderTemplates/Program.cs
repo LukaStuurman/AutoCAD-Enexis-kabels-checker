@@ -11,6 +11,7 @@ Require((int)KaderVersion.K2024_1_0 == 0 && (int)KaderVersion.K2025_2_0 == 1
     && (int)KaderVersion.K2026_3_2 == 2 && (int)KaderVersion.K2026_3_0 == 3,
     "Kaderversies van bestaande stations zijn veranderd.");
 Require(KaderVersionSelection.Current == KaderVersion.K2026_3_2, "Standaardkader veranderd.");
+DesignCurrentChecks.Run(args[0]);
 
 foreach (var version in new[] { KaderVersion.K2026_3_0, KaderVersion.K2026_3_2 })
 {
@@ -74,8 +75,17 @@ foreach (var version in new[] { KaderVersion.K2026_3_0, KaderVersion.K2026_3_2 }
         }
         foreach (var sheet in input.Worksheets)
             foreach (var cell in sheet.CellsUsed().Where(x => x.HasFormula))
+            {
+                if (sheet.Name.StartsWith("(") && cell.Address.ToString() == (isV30 ? "D77" : "D81")) continue;
+                if (sheet.Name == "Transformator" && cell.Address.ColumnNumber == 2) continue;
+                if (sheet.Name == "Transformator" && cell.FormulaA1.Contains("'[1]("))
+                {
+                    Require(output.Worksheet(sheet.Name).Cell(cell.Address).FormulaA1 == cell.FormulaA1.Replace("'[1](", "'("), "Extern gelinkte richting niet hersteld.");
+                    continue;
+                }
                 Require(output.Worksheet(sheet.Name).Cell(cell.Address).FormulaA1 == cell.FormulaA1,
                     $"{layout}: templateformule veranderd in {sheet.Name}!{cell.Address}.");
+            }
         Console.WriteLine($"OK - {definition.DisplayName}: {options.Count} opties in alle 12 richtingen, beide kabelprofielen, lege ongebruikte richtingen en behoud van templateformules.");
     }
     finally

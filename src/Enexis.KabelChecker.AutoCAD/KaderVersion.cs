@@ -32,7 +32,15 @@ internal static class KaderVersions
 
 internal static class KaderVersionSelection
 {
+    private static readonly Dictionary<KaderVersion, DesignCurrentMode> Modes = new();
     public static KaderVersion Current { get; private set; } = KaderVersion.K2026_3_2;
+    public static DesignCurrentMode CurrentMode => Modes.GetValueOrDefault(Current, DesignCurrentMode.Automatisch);
+
+    public static void SetMode(DesignCurrentMode mode)
+    {
+        if (!Enum.IsDefined(mode)) throw new ArgumentOutOfRangeException(nameof(mode));
+        Modes[Current] = mode;
+    }
 
     public static void SetCurrent(KaderVersion version) => Current = version;
 

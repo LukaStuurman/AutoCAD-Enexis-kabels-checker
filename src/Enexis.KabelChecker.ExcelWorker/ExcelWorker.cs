@@ -28,6 +28,8 @@ public static class ExcelWorker
 
         var request = JsonSerializer.Deserialize<ExportRequest>(requestJson)
             ?? throw new InvalidOperationException("Excel-exportverzoek kon niet worden gelezen.");
+        if (request.CurrentMode is not ("Automatisch" or "Verbruik" or "Opwek"))
+            throw new InvalidOperationException("Onbekende stroombasis.");
         if (request.Directions.Count == 0)
             throw new InvalidOperationException("Sla eerst minimaal één richting op.");
 
@@ -67,6 +69,9 @@ public static class ExcelWorker
         {
             var cableSheet = cableTemplate.CopyTo(BuildDirectionCableSheetName(direction.Number));
             WriteLegacyCounts(cableSheet, direction.Loads);
+            var totalRow = request.Layout.Equals("Legacy2024", StringComparison.OrdinalIgnoreCase) ? 38 : 45;
+            SetCableTotal(cableSheet.Cell(totalRow, 3), request.CurrentMode,
+                $"SUM(E{request.CountFirstRow}:E{request.CountLastRow})", $"SUM(F{request.CountFirstRow}:F{request.CountLastRow})");
 
             var controlTemplate = direction.Evenredig ? evenredigTemplate : lastHalfTemplate;
             var controlSheet = controlTemplate.CopyTo(BuildDirectionControlSheetName(direction));
@@ -85,7 +90,7 @@ public static class ExcelWorker
 
         var totals = request.Directions
             .SelectMany(x => x.Loads)
-            .GroupBy(x => x.Row)
+            .GroupBy(x => x.StationRow > 0 ? x.StationRow : x.Row)
             .Select(x => new RowCount(x.Key, x.Sum(y => y.Count)))
             .ToArray();
         WriteLegacyCounts(transformer, totals);
@@ -103,8 +108,26 @@ public static class ExcelWorker
         {
             var sheet = workbook.Worksheet($"({number})");
             Clear2026Counts(sheet, countLastRow);
+            SetCableTotal(sheet.Cell(isV30 ? 77 : 81, 4), request.CurrentMode,
+                $"SUM(H5:H{countLastRow})", $"SUM(I5:I{countLastRow})");
             ClearControlCableLengths(sheet, 18, 36, V32ControlLengthColumn);
             ClearControlCableLengths(sheet, lastHalfFirstRow, lastHalfLastRow, V32ControlLengthColumn);
+        }
+
+        // Restore the station's live direction links, including templates with flattened zero values.
+        // 3.2 has two extra cable rows before the shared station rows.
+        var transformer = workbook.Worksheet("Transformator");
+        // The 3.2 source has two power sums pointing at an external copy of these direction sheets.
+        foreach (var cell in transformer.CellsUsed().Where(x => x.HasFormula && x.FormulaA1.Contains("'[1](")))
+            cell.FormulaA1 = cell.FormulaA1.Replace("'[1](", "'(");
+        var stationLastRow = isV30 ? 75 : 77;
+        for (var row = 5; row <= stationLastRow; row++)
+        {
+            var cableRow = !isV30 && row >= 43 ? row + 2 : row;
+            var source = workbook.Worksheet("(1)");
+            if (source.Cell(cableRow, 6).DataType != XLDataType.Number
+                && source.Cell(cableRow, 7).DataType != XLDataType.Number) continue;
+            transformer.Cell(row, 2).FormulaA1 = string.Join("+", Enumerable.Range(1, 12).Select(n => $"'({n})'!B{cableRow}"));
         }
 
         foreach (var direction in request.Directions.OrderBy(x => x.Number))
@@ -134,6 +157,14 @@ public static class ExcelWorker
             }
         }
     }
+
+    private static void SetCableTotal(IXLCell cell, string mode, string consumption, string generation) =>
+        cell.FormulaA1 = mode switch
+        {
+            "Verbruik" => consumption,
+            "Opwek" => generation,
+            _ => $"MAX({consumption},{generation})"
+        };
 
     private static void ValidateLegacyTemplates(XLWorkbook workbook)
     {
@@ -264,7 +295,8 @@ public static class ExcelWorker
         string Layout,
         int CountFirstRow,
         int CountLastRow,
-        List<DirectionRequest> Directions);
+        List<DirectionRequest> Directions,
+        string CurrentMode = "Automatisch");
 
     private sealed record DirectionRequest(
         int Number,
@@ -272,7 +304,7 @@ public static class ExcelWorker
         List<RowCount> Loads,
         List<SegmentRequest> Segments);
 
-    private sealed record RowCount(int Row, int Count);
+    private sealed record RowCount(int Row, int Count, int StationRow = 0);
 
     private sealed record SegmentRequest(string CableName, double LengthMeters);
 }

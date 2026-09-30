@@ -62,7 +62,7 @@ internal static class ExcelDirectionExporter
                         var option = ExcelLoadCatalog.FindByKey(version, group.Key)
                             ?? throw new InvalidOperationException(
                                 $"Onbekende Excel-belastingcode voor {KaderVersions.Get(version).DisplayName}: {group.Key}.");
-                        return new WorkerRowCount(option.Row, group.Sum(x => x.Count));
+                        return new WorkerRowCount(option.Row, group.Sum(x => x.Count), option.StationRow);
                     })
                     .OrderBy(x => x.Row)
                     .ToArray(),
@@ -80,7 +80,7 @@ internal static class ExcelDirectionExporter
             _ => throw new ArgumentOutOfRangeException(nameof(version))
         };
 
-        return JsonSerializer.Serialize(new WorkerExportRequest(layout, firstRow, lastRow, workerDirections));
+        return JsonSerializer.Serialize(new WorkerExportRequest(layout, firstRow, lastRow, workerDirections, KaderVersionSelection.CurrentMode.ToString()));
     }
 
     private static byte[] ReadEmbeddedTemplate(string embeddedTemplateFileName)
@@ -103,7 +103,8 @@ internal static class ExcelDirectionExporter
         string Layout,
         int CountFirstRow,
         int CountLastRow,
-        IReadOnlyList<WorkerDirectionRequest> Directions);
+        IReadOnlyList<WorkerDirectionRequest> Directions,
+        string CurrentMode);
 
     private sealed record WorkerDirectionRequest(
         int Number,
@@ -111,7 +112,7 @@ internal static class ExcelDirectionExporter
         IReadOnlyList<WorkerRowCount> Loads,
         IReadOnlyList<WorkerSegmentRequest> Segments);
 
-    private sealed record WorkerRowCount(int Row, int Count);
+    private sealed record WorkerRowCount(int Row, int Count, int StationRow);
 
     private sealed record WorkerSegmentRequest(string CableName, double LengthMeters);
 }

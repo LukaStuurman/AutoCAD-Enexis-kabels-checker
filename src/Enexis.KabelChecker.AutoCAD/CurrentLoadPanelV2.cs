@@ -10,6 +10,8 @@ internal sealed class CurrentLoadPanel : UserControl
 
     private readonly NumericUpDown _radiusMeters = new();
     private readonly ComboBox _kaderVersion = new();
+    private readonly ComboBox _currentMode = new();
+    private readonly Label _stationTotal = new();
     private readonly DataGridView _grid = new();
     private readonly Label _total = new();
     private readonly Label _assessment = new();
@@ -18,6 +20,40 @@ internal sealed class CurrentLoadPanel : UserControl
     private readonly Dictionary<ObjectId, double> _selectedTextObjects = new();
     private CalculationResult? _calculation;
     private bool _refreshing;
+    private bool _settingSelection;
+    private IReadOnlyList<ExcelMappedLoad> _mapped = Array.Empty<ExcelMappedLoad>();
+
+    public event Action? InputsChanged;
+    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
+    public Func<KaderVersion, bool>? CanChangeKader { get; set; }
+    public bool HasInputs => _rows.Any(x => x.Count > 0 && (x.Amps > 0 || x.AllowZero));
+
+    public IReadOnlyList<ExcelMappedLoad>? GetMappedLoads() =>
+        DesignCurrentCalculator.MatchesInputs(GetCurrentLoads(), _mapped)
+        && _mapped.All(x => ExcelLoadCatalog.FindByKey(KaderVersionSelection.Current, x.ExcelLoadKey) is not null)
+            ? _mapped : null;
+
+    public IReadOnlyList<ExcelMappedLoad>? ResolveMappedLoads(IWin32Window owner)
+    {
+        _grid.EndEdit();
+        var mapped = ExcelLoadResolver.Resolve(owner, GetCurrentLoads(), _mapped);
+        if (mapped is null) return null;
+        _mapped = mapped;
+        NormalizeRows();
+        RefreshGrid();
+        RefreshAssessment();
+        InputsChanged?.Invoke();
+        return mapped;
+    }
+
+    public void SetStationTotals(DesignCurrentTotals? totals, int directions)
+    {
+        var mode = KaderVersionSelection.CurrentMode;
+        _stationTotal.Text = totals is null
+            ? "Station: koppel de invoer aan aansluittype via Bereken richting."
+            : $"Station ({directions} richting(en)): verbruik {FormatAmps(totals.StationConsumptionAmps)} A / opwek {FormatAmps(totals.StationGenerationAmps)} A.\n" +
+              $"Gekozen: {totals.StationBasis(mode)} — {FormatAmps(totals.StationCurrent(mode))} A (trafowaarden).";
+    }
 
     public CurrentLoadPanel()
     {
@@ -30,7 +66,7 @@ internal sealed class CurrentLoadPanel : UserControl
 
     public IReadOnlyList<CurrentLoadInput> GetCurrentLoads() =>
         _rows
-            .Where(x => x.Amps > 0 && x.Count > 0)
+            .Where(x => (x.Amps > 0 || x.AllowZero) && x.Count > 0)
             .GroupBy(x => x.Amps)
             .Select(x => new CurrentLoadInput(x.Key, x.Sum(y => y.Count)))
             .OrderBy(x => x.Amps)
@@ -40,21 +76,36 @@ internal sealed class CurrentLoadPanel : UserControl
 
     public void SetKaderVersion(KaderVersion version)
     {
+        _settingSelection = true;
         KaderVersionSelection.SetCurrent(version);
         var definition = KaderVersions.Get(version);
         if (!Equals(_kaderVersion.SelectedItem, definition))
             _kaderVersion.SelectedItem = definition;
+        _currentMode.SelectedItem = KaderVersionSelection.CurrentMode;
+        _settingSelection = false;
     }
 
-    public void LoadCurrentLoads(IEnumerable<CurrentLoadInput> loads)
+    public void SetCurrentMode(DesignCurrentMode mode)
+    {
+        _settingSelection = true;
+        KaderVersionSelection.SetMode(mode);
+        _currentMode.SelectedItem = mode;
+        _settingSelection = false;
+        RefreshGrid();
+        RefreshAssessment();
+    }
+
+    public void LoadCurrentLoads(IEnumerable<CurrentLoadInput> loads, IReadOnlyList<ExcelMappedLoad>? mapped = null)
     {
         _rows.Clear();
         _selectedTextObjects.Clear();
-        foreach (var load in loads.Where(x => x.Amps > 0 && x.Count > 0))
-            _rows.Add(new LoadRow(load.Amps, load.Count));
+        _mapped = mapped ?? Array.Empty<ExcelMappedLoad>();
+        foreach (var load in loads.Where(x => x.Amps >= 0 && x.Count > 0))
+            _rows.Add(new LoadRow(load.Amps, load.Count, load.Amps == 0));
         NormalizeRows();
         RefreshGrid();
         RefreshAssessment("Ontwerpstroom van opgeslagen richting geladen.");
+        InputsChanged?.Invoke();
     }
 
     public void SetCalculation(CalculationResult? calculation)
@@ -66,11 +117,13 @@ internal sealed class CurrentLoadPanel : UserControl
     public void ResetAll()
     {
         _rows.Clear();
+        _mapped = Array.Empty<ExcelMappedLoad>();
         _selectedTextObjects.Clear();
         _calculation = null;
         _radiusMeters.Value = 3.0M;
         RefreshGrid();
         RefreshAssessment("Ontwerpstroom volledig gereset.");
+        InputsChanged?.Invoke();
     }
 
     private void BuildUi()
@@ -82,19 +135,19 @@ internal sealed class CurrentLoadPanel : UserControl
             ColumnCount = 3,
             RowCount = 1
         };
-        root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 28));
-        root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 40));
-        root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 32));
+        root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 27));
+        root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 46));
+        root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 27));
 
         var actions = new FlowLayoutPanel
         {
             Dock = DockStyle.Fill,
             FlowDirection = FlowDirection.TopDown,
             WrapContents = false,
-            AutoSize = true
+            AutoScroll = true
         };
 
-        var kader = new FlowLayoutPanel { AutoSize = true, WrapContents = false };
+        var kader = new FlowLayoutPanel { AutoSize = true, WrapContents = false, FlowDirection = FlowDirection.TopDown };
         kader.Controls.Add(new Label
         {
             Text = "Kader versie:",
@@ -110,13 +163,42 @@ internal sealed class CurrentLoadPanel : UserControl
         {
             if (_kaderVersion.SelectedItem is KaderVersionDefinition selected)
             {
+                if (!_settingSelection && CanChangeKader?.Invoke(selected.Version) == false)
+                {
+                    _settingSelection = true;
+                    _kaderVersion.SelectedItem = KaderVersions.Get(KaderVersionSelection.Current);
+                    _settingSelection = false;
+                    return;
+                }
                 KaderVersionSelection.SetCurrent(selected.Version);
+                _currentMode.SelectedItem = KaderVersionSelection.CurrentMode;
+                RefreshGrid();
+                RefreshAssessment();
                 _details.Text = $"Kaderversie ingesteld op {selected.DisplayName}.";
+                if (!_settingSelection) InputsChanged?.Invoke();
             }
         };
         _kaderVersion.SelectedItem = KaderVersions.Get(KaderVersionSelection.Current);
         kader.Controls.Add(_kaderVersion);
         actions.Controls.Add(kader);
+
+        var basis = new FlowLayoutPanel { AutoSize = true, WrapContents = true };
+        basis.Controls.Add(new Label { Text = "Stroombasis:", AutoSize = true, Padding = new Padding(0, 5, 3, 0) });
+        _currentMode.DropDownStyle = ComboBoxStyle.DropDownList;
+        _currentMode.Width = 150;
+        foreach (var mode in Enum.GetValues<DesignCurrentMode>()) _currentMode.Items.Add(mode);
+        _currentMode.SelectedIndexChanged += (_, _) =>
+        {
+            if (_settingSelection || _currentMode.SelectedItem is not DesignCurrentMode mode) return;
+            _grid.EndEdit();
+            KaderVersionSelection.SetMode(mode);
+            RefreshGrid();
+            RefreshAssessment();
+            InputsChanged?.Invoke();
+        };
+        _currentMode.SelectedItem = KaderVersionSelection.CurrentMode;
+        basis.Controls.Add(_currentMode);
+        actions.Controls.Add(basis);
 
         actions.Controls.Add(new Label
         {
@@ -132,6 +214,9 @@ internal sealed class CurrentLoadPanel : UserControl
         var manual = new Button { Text = "Handmatig", AutoSize = true };
         manual.Click += (_, _) => AddManualRow();
         buttons.Controls.Add(manual);
+        var fromKader = new Button { Text = "Uit kader", AutoSize = true };
+        fromKader.Click += (_, _) => AddKaderRow();
+        buttons.Controls.Add(fromKader);
         var remove = new Button { Text = "Verwijder rij", AutoSize = true };
         remove.Click += (_, _) => RemoveSelectedRow();
         buttons.Controls.Add(remove);
@@ -147,12 +232,13 @@ internal sealed class CurrentLoadPanel : UserControl
         _radiusMeters.Width = 70;
         radius.Controls.Add(_radiusMeters);
         actions.Controls.Add(radius);
-        actions.Controls.Add(new Label
+        var instructions = new Label
         {
-            Text = "Klik op Handmatig om zelf een ontwerpstroomrij toe te voegen. Alle ontwerpstromen en aantallen in de tabel zijn daarna vrij aanpasbaar.",
+            Text = "Uit kader kiest direct een aansluittype. Cirkel/Handmatig leest waarden uit de gekozen kolom. Automatisch vergelijkt eerst de totalen van verbruik en opwek, per kabel en station apart.",
             AutoSize = true,
             MaximumSize = new Size(300, 0)
-        });
+        };
+        actions.Controls.Add(instructions);
         root.Controls.Add(actions, 0, 0);
 
         ConfigureGrid();
@@ -165,7 +251,7 @@ internal sealed class CurrentLoadPanel : UserControl
         overview.Controls.Add(_total, 0, 1);
         root.Controls.Add(overview, 1, 0);
 
-        var status = new TableLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, ColumnCount = 1, RowCount = 2 };
+        var status = new TableLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, ColumnCount = 1, RowCount = 3 };
         _assessment.AutoSize = true;
         _assessment.MaximumSize = new Size(330, 0);
         _assessment.Font = new Font(SystemFonts.MessageBoxFont.FontFamily, 10F, FontStyle.Bold);
@@ -173,7 +259,19 @@ internal sealed class CurrentLoadPanel : UserControl
         _details.MaximumSize = new Size(330, 0);
         status.Controls.Add(_assessment, 0, 0);
         status.Controls.Add(_details, 0, 1);
+        _stationTotal.AutoSize = true;
+        _stationTotal.MaximumSize = new Size(270, 0);
+        _stationTotal.Padding = new Padding(0, 10, 0, 0);
+        status.Controls.Add(_stationTotal, 0, 2);
         root.Controls.Add(status, 2, 0);
+
+        Resize += (_, _) =>
+        {
+            var width = Math.Max(100, (ClientSize.Width - root.Padding.Horizontal) * 27 / 100 - 16);
+            _assessment.MaximumSize = _details.MaximumSize = _stationTotal.MaximumSize = new Size(width, 0);
+            instructions.MaximumSize = new Size(width, 0);
+            _kaderVersion.Width = Math.Min(220, width);
+        };
 
         Controls.Add(root);
     }
@@ -190,9 +288,10 @@ internal sealed class CurrentLoadPanel : UserControl
         _grid.EditMode = DataGridViewEditMode.EditOnEnter;
         _grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
         _grid.Height = 110;
-        _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Amps", HeaderText = "Ontwerpstroom [A]", FillWeight = 110 });
+        _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Amps", HeaderText = "Tekst / invoer [A]", FillWeight = 85 });
         _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Count", HeaderText = "Aantal", FillWeight = 65 });
-        _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Subtotal", HeaderText = "Subtotaal [A]", ReadOnly = true, FillWeight = 90 });
+        _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Consumption", HeaderText = "Verbruik totaal [A]", ReadOnly = true, FillWeight = 95 });
+        _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Generation", HeaderText = "Opwek totaal [A]", ReadOnly = true, FillWeight = 95 });
         _grid.CellValidating += Grid_CellValidating;
         _grid.CellEndEdit += Grid_CellEndEdit;
         _grid.DataError += (_, e) => e.ThrowException = false;
@@ -222,11 +321,12 @@ internal sealed class CurrentLoadPanel : UserControl
         NormalizeRows();
         RefreshGrid();
         RefreshAssessment(result.Message);
+        InputsChanged?.Invoke();
     }
 
     private void AddManualRow()
     {
-        var draftIndex = _rows.FindIndex(x => x.Amps <= 0);
+        var draftIndex = _rows.FindIndex(x => x.Amps <= 0 && !x.AllowZero);
         if (draftIndex < 0)
         {
             _rows.Add(new LoadRow(0, 1));
@@ -244,6 +344,23 @@ internal sealed class CurrentLoadPanel : UserControl
         RefreshAssessment("Nieuwe handmatige rij toegevoegd. Vul de ontwerpstroom en het aantal in.");
     }
 
+    private void AddKaderRow()
+    {
+        _grid.EndEdit();
+        if (HasInputs && GetMappedLoads() is null && ResolveMappedLoads(FindForm()!) is null) return;
+        using var dialog = new KaderLoadPicker(KaderVersionSelection.Current);
+        if (dialog.ShowDialog(FindForm()) != DialogResult.OK || dialog.SelectedOption is not ExcelLoadOption option) return;
+        var amps = option.InputAmps(KaderVersionSelection.CurrentMode);
+        var row = _rows.FirstOrDefault(x => SameAmps(x.Amps, amps) && (amps > 0 || x.AllowZero));
+        if (row is null) _rows.Add(new LoadRow(amps, dialog.Count, amps == 0));
+        else row.Count += dialog.Count;
+        _mapped = _mapped.Concat(new[] { new ExcelMappedLoad(option.Key, amps, dialog.Count) }).ToArray();
+        NormalizeRows();
+        RefreshGrid();
+        RefreshAssessment();
+        InputsChanged?.Invoke();
+    }
+
     private void RemoveSelectedRow()
     {
         if (_grid.CurrentRow is null)
@@ -255,8 +372,10 @@ internal sealed class CurrentLoadPanel : UserControl
         foreach (var id in _selectedTextObjects.Where(x => SameAmps(x.Value, amps)).Select(x => x.Key).ToArray())
             _selectedTextObjects.Remove(id);
         _rows.RemoveAt(index);
+        _mapped = _mapped.Where(x => !SameAmps(x.Amps, amps)).ToArray();
         RefreshGrid();
         RefreshAssessment("Ontwerpstroomrij verwijderd.");
+        InputsChanged?.Invoke();
     }
 
     private void Grid_CellValidating(object? sender, DataGridViewCellValidatingEventArgs e)
@@ -269,7 +388,7 @@ internal sealed class CurrentLoadPanel : UserControl
         {
             if (string.IsNullOrWhiteSpace(text) && e.RowIndex < _rows.Count && _rows[e.RowIndex].Amps <= 0)
                 return;
-            if (!TryParsePositiveAmps(text, out _))
+            if (!(e.RowIndex < _rows.Count && _rows[e.RowIndex].AllowZero && text?.Trim() == "0") && !TryParsePositiveAmps(text, out _))
             {
                 e.Cancel = true;
                 _details.Text = "Ontwerpstroom moet een positief getal zijn.";
@@ -299,6 +418,8 @@ internal sealed class CurrentLoadPanel : UserControl
 
             var old = row.Amps;
             row.Amps = amps;
+            row.AllowZero = false;
+            if (!SameAmps(old, amps)) _mapped = _mapped.Where(x => !SameAmps(x.Amps, old)).ToArray();
             foreach (var id in _selectedTextObjects.Where(x => SameAmps(x.Value, old)).Select(x => x.Key).ToArray())
                 _selectedTextObjects[id] = amps;
         }
@@ -308,6 +429,12 @@ internal sealed class CurrentLoadPanel : UserControl
                 return;
 
             row.Count = count;
+            var mappedTypes = _mapped.Where(x => SameAmps(x.Amps, row.Amps))
+                .Select(x => ExcelLoadCatalog.FindByKey(KaderVersionSelection.Current, x.ExcelLoadKey))
+                .ToArray();
+            if (mappedTypes.Length > 0 && mappedTypes.All(x => x is not null) && mappedTypes.DistinctBy(x => x!.Key).Count() == 1)
+                _mapped = _mapped.Where(x => !SameAmps(x.Amps, row.Amps))
+                    .Append(new ExcelMappedLoad(mappedTypes[0]!.Key, row.Amps, _rows.Where(x => SameAmps(x.Amps, row.Amps)).Sum(x => x.Count))).ToArray();
             var tracked = _selectedTextObjects.Where(x => SameAmps(x.Value, row.Amps)).Select(x => x.Key).ToArray();
             foreach (var id in tracked.Skip(count))
                 _selectedTextObjects.Remove(id);
@@ -323,6 +450,7 @@ internal sealed class CurrentLoadPanel : UserControl
         UpdateRowDisplay(e.RowIndex);
         UpdateTotal();
         RefreshAssessment("Ontwerpstroomtabel aangepast.");
+        InputsChanged?.Invoke();
     }
 
     private void UpdateRowDisplay(int rowIndex)
@@ -334,11 +462,9 @@ internal sealed class CurrentLoadPanel : UserControl
         _refreshing = true;
         try
         {
-            _grid.Rows[rowIndex].Cells["Amps"].Value = row.Amps > 0 ? FormatAmps(row.Amps) : string.Empty;
+            _grid.Rows[rowIndex].Cells["Amps"].Value = row.Amps > 0 || row.AllowZero ? FormatAmps(row.Amps) : string.Empty;
             _grid.Rows[rowIndex].Cells["Count"].Value = row.Count.ToString(DutchCulture);
-            _grid.Rows[rowIndex].Cells["Subtotal"].Value = row.Amps > 0 && row.Count > 0
-                ? FormatAmps(row.Amps * row.Count)
-                : string.Empty;
+            UpdateMappedColumns(rowIndex);
         }
         finally
         {
@@ -348,7 +474,7 @@ internal sealed class CurrentLoadPanel : UserControl
 
     private void IncrementRow(double amps)
     {
-        var row = _rows.FirstOrDefault(x => SameAmps(x.Amps, amps));
+        var row = _rows.FirstOrDefault(x => SameAmps(x.Amps, amps) && (amps > 0 || x.AllowZero));
         if (row is null)
             _rows.Add(new LoadRow(amps, 1));
         else
@@ -368,8 +494,8 @@ internal sealed class CurrentLoadPanel : UserControl
     private void NormalizeRows()
     {
         var merged = _rows
-            .GroupBy(x => x.Amps)
-            .Select(x => new LoadRow(x.Key, x.Sum(y => y.Count)))
+            .GroupBy(x => (x.Amps, x.AllowZero))
+            .Select(x => new LoadRow(x.Key.Amps, x.Sum(y => y.Count), x.Key.AllowZero))
             .OrderBy(x => x.Amps)
             .ToArray();
         _rows.Clear();
@@ -384,9 +510,9 @@ internal sealed class CurrentLoadPanel : UserControl
             _grid.Rows.Clear();
             foreach (var row in _rows)
             {
-                var ampsText = row.Amps > 0 ? FormatAmps(row.Amps) : string.Empty;
-                var subtotalText = row.Amps > 0 && row.Count > 0 ? FormatAmps(row.Amps * row.Count) : string.Empty;
-                _grid.Rows.Add(ampsText, row.Count.ToString(DutchCulture), subtotalText);
+                var ampsText = row.Amps > 0 || row.AllowZero ? FormatAmps(row.Amps) : string.Empty;
+                var index = _grid.Rows.Add(ampsText, row.Count.ToString(DutchCulture), "—", "—");
+                UpdateMappedColumns(index);
             }
         }
         finally
@@ -398,27 +524,50 @@ internal sealed class CurrentLoadPanel : UserControl
 
     private void UpdateTotal()
     {
-        var validRows = _rows.Where(x => x.Amps > 0 && x.Count > 0).ToArray();
-        var total = validRows.Sum(x => x.Amps * x.Count);
-        var count = validRows.Sum(x => x.Count);
-        _total.Text = count == 0 ? "Totaal: 0 A" : $"Totaal: {FormatAmps(total)} A ({count}×)";
+        var mapped = GetMappedLoads();
+        if (mapped is null) { _total.Text = "Koppeling nodig — druk Bereken richting."; return; }
+        var totals = DesignCurrentCalculator.Calculate(KaderVersionSelection.Current, mapped);
+        var mode = KaderVersionSelection.CurrentMode;
+        _total.Text = $"Kabel: {totals.CableBasis(mode)} {FormatAmps(totals.CableCurrent(mode))} A ({totals.Count}×)";
+    }
+
+    private void UpdateMappedColumns(int index)
+    {
+        var row = _rows[index];
+        var loads = _mapped.Where(x => SameAmps(x.Amps, row.Amps)).ToArray();
+        var complete = loads.Sum(x => x.Count) == row.Count && loads.Length > 0
+            && loads.All(x => ExcelLoadCatalog.FindByKey(KaderVersionSelection.Current, x.ExcelLoadKey) is not null);
+        var totals = complete ? DesignCurrentCalculator.Calculate(KaderVersionSelection.Current, loads) : null;
+        _grid.Rows[index].Cells["Consumption"].Value = totals is null ? "—" : FormatAmps(totals.CableConsumptionAmps);
+        _grid.Rows[index].Cells["Generation"].Value = totals is null ? "—" : FormatAmps(totals.CableGenerationAmps);
+        _grid.Rows[index].Cells["Amps"].ToolTipText = complete
+            ? string.Join("\n", loads.Select(x => $"{x.Count}× {ExcelLoadCatalog.FindByKey(KaderVersionSelection.Current, x.ExcelLoadKey)!.DisplayName}"))
+            : "Koppel deze invoer via Bereken richting.";
     }
 
     private void RefreshAssessment(string? message = null)
     {
-        var validRows = _rows.Where(x => x.Amps > 0 && x.Count > 0).ToArray();
-        var total = validRows.Sum(x => x.Amps * x.Count);
+        var mapped = GetMappedLoads();
+        if (mapped is null)
+        {
+            _assessment.ForeColor = SystemColors.ControlText;
+            _assessment.Text = "Ontwerpstroom nog niet gekoppeld";
+            _details.Text = message ?? "Druk Bereken richting of kies een aansluittype via Uit kader.";
+            return;
+        }
+        var totals = DesignCurrentCalculator.Calculate(KaderVersionSelection.Current, mapped);
+        var total = totals.CableCurrent(KaderVersionSelection.CurrentMode);
         if (_calculation?.MaxDesignCurrentAmps is not int maxAllowed)
         {
             _assessment.ForeColor = SystemColors.ControlText;
-            _assessment.Text = validRows.Length == 0 ? "Ontwerpstroom: —" : $"Ontwerpstroom totaal: {FormatAmps(total)} A";
+            _assessment.Text = totals.Count == 0 ? "Ontwerpstroom: —" : $"Kabel {totals.CableBasis(KaderVersionSelection.CurrentMode)}: {FormatAmps(total)} A";
             _details.Text = string.IsNullOrWhiteSpace(message) ? "Bereken de kabelrichting om de ontwerpstroom te toetsen." : message;
             return;
         }
 
         var fits = total <= maxAllowed + 1e-9;
         _assessment.ForeColor = fits ? Color.SeaGreen : Color.Firebrick;
-        _assessment.Text = validRows.Length == 0
+        _assessment.Text = totals.Count == 0
             ? $"Maximaal toegestaan: {maxAllowed} A"
             : fits
                 ? $"PAST — {FormatAmps(total)} A ≤ {maxAllowed} A"
@@ -449,8 +598,9 @@ internal sealed class CurrentLoadPanel : UserControl
 
     private sealed class LoadRow
     {
-        public LoadRow(double amps, int count) { Amps = amps; Count = count; }
+        public LoadRow(double amps, int count, bool allowZero = false) { Amps = amps; Count = count; AllowZero = allowZero; }
         public double Amps { get; set; }
         public int Count { get; set; }
+        public bool AllowZero { get; set; }
     }
 }
